@@ -1,0 +1,781 @@
+from datetime import timedelta
+from decimal import Decimal
+from django import forms
+from django.contrib.auth.models import User, Group, Permission
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.utils import timezone
+from django.utils.text import slugify
+
+from .models import (
+    Product, ProductSet, Category, Supplier, Customer,
+    Purchase, Sale, SiteSetting, Tenant, TenantMembership,
+    SubscriptionPlan, TenantSubscription
+)
+
+# ---------------------------
+# Auth / Security Forms
+# ---------------------------
+
+RESERVED_TENANT_SLUGS = {
+    'admin', 'api', 'auth', 'backup', 'credit', 'customers', 'dashboard',
+    'invoice', 'login', 'logout', 'pos', 'products', 'purchases', 'register',
+    'reports', 'sales', 'security', 'settings', 'static', 'subscription', 'suppliers',
+}
+
+
+class TenantRegistrationForm(forms.Form):
+    business_name = forms.CharField(
+        max_length=150,
+        label="Business name",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "organization",
+            "placeholder": "Store or company name",
+        }),
+    )
+    account_slug = forms.SlugField(
+        max_length=80,
+        label="Account ID",
+        help_text="Used as the tenant workspace identifier.",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "off",
+            "placeholder": "my-store",
+        }),
+    )
+    business_type = forms.ChoiceField(
+        choices=Tenant.BUSINESS_TYPE_CHOICES,
+        label="Business type",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    subscription_plan = forms.ChoiceField(
+        choices=(
+            ('trial', 'Free Trial - 7 days'),
+            ('monthly', 'Monthly - Rs. 299'),
+            ('yearly', 'Yearly - Rs. 3500'),
+        ),
+        initial='trial',
+        label="Subscription plan",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    owner_name = forms.CharField(
+        max_length=150,
+        label="Owner name",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "name",
+            "placeholder": "Full name",
+        }),
+    )
+    contact_email = forms.EmailField(
+        label="Business email",
+        widget=forms.EmailInput(attrs={
+            "class": "form-control",
+            "autocomplete": "email",
+            "placeholder": "owner@example.com",
+        }),
+    )
+    contact_phone = forms.CharField(
+        max_length=32,
+        label="Business phone",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "tel",
+            "placeholder": "+91 98765 43210",
+        }),
+    )
+    tax_id = forms.CharField(
+        max_length=32,
+        required=False,
+        label="GSTIN / Tax ID",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "off",
+            "placeholder": "Optional",
+        }),
+    )
+    address = forms.CharField(
+        label="Business address",
+        widget=forms.Textarea(attrs={
+            "class": "form-control",
+            "rows": 2,
+            "autocomplete": "street-address",
+            "placeholder": "Billing and business address",
+        }),
+    )
+    city = forms.CharField(
+        max_length=80,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "address-level2",
+            "placeholder": "City",
+        }),
+    )
+    state = forms.CharField(
+        max_length=80,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "address-level1",
+            "placeholder": "State",
+        }),
+    )
+    postal_code = forms.CharField(
+        max_length=20,
+        label="PIN / Postal code",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "postal-code",
+            "placeholder": "Postal code",
+        }),
+    )
+    country = forms.CharField(
+        max_length=80,
+        initial="India",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "country-name",
+            "placeholder": "Country",
+        }),
+    )
+    username = forms.CharField(
+        max_length=150,
+        label="Admin username",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "autocomplete": "username",
+            "placeholder": "Login username",
+        }),
+    )
+    password1 = forms.CharField(
+        label="Password",
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+            "placeholder": "Create a password",
+        }),
+    )
+    password2 = forms.CharField(
+        label="Confirm password",
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+            "placeholder": "Repeat password",
+        }),
+    )
+    accepted_terms = forms.BooleanField(
+        label="I confirm this information is correct and I am authorized to create this tenant.",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    def clean_account_slug(self):
+        slug = slugify(self.cleaned_data['account_slug']).lower()
+        if not slug:
+            raise ValidationError("Enter a valid account ID.")
+        if slug in RESERVED_TENANT_SLUGS:
+            raise ValidationError("This account ID is reserved. Choose another one.")
+        if Tenant.objects.filter(slug__iexact=slug).exists():
+            raise ValidationError("This account ID is already taken.")
+        return slug
+
+    def clean_username(self):
+        username = self.cleaned_data['username'].strip()
+        if User.objects.filter(username__iexact=username).exists():
+            raise ValidationError("This username is already taken.")
+        return username
+
+    def clean_contact_email(self):
+        email = self.cleaned_data['contact_email'].strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise ValidationError("A user with this email already exists.")
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        password1 = cleaned.get('password1')
+        password2 = cleaned.get('password2')
+        if password1 and password2 and password1 != password2:
+            self.add_error('password2', "Passwords do not match.")
+        if password1:
+            try:
+                validate_password(password1)
+            except ValidationError as exc:
+                self.add_error('password1', exc)
+        return cleaned
+
+    def _admin_group(self):
+        group, created = Group.objects.get_or_create(name='Admin')
+        if created or not group.permissions.exists():
+            group.permissions.set(Permission.objects.filter(content_type__app_label='posapp'))
+        return group
+
+    @transaction.atomic
+    def save(self):
+        tenant = Tenant.objects.create(
+            name=self.cleaned_data['business_name'],
+            slug=self.cleaned_data['account_slug'],
+            business_type=self.cleaned_data['business_type'],
+            owner_name=self.cleaned_data['owner_name'],
+            contact_email=self.cleaned_data['contact_email'],
+            contact_phone=self.cleaned_data['contact_phone'],
+            tax_id=self.cleaned_data.get('tax_id', ''),
+            address=self.cleaned_data['address'],
+            city=self.cleaned_data['city'],
+            state=self.cleaned_data['state'],
+            postal_code=self.cleaned_data['postal_code'],
+            country=self.cleaned_data['country'],
+            plan=self.cleaned_data['subscription_plan'],
+        )
+        name_parts = self.cleaned_data['owner_name'].split(None, 1)
+        user = User.objects.create_user(
+            username=self.cleaned_data['username'],
+            email=self.cleaned_data['contact_email'],
+            password=self.cleaned_data['password1'],
+            first_name=name_parts[0],
+            last_name=name_parts[1] if len(name_parts) > 1 else '',
+            is_staff=True,
+        )
+        user.groups.add(self._admin_group())
+        TenantMembership.objects.create(tenant=tenant, user=user, role='owner')
+        SiteSetting.objects.get_or_create(
+            tenant=tenant,
+            defaults={
+                'singleton_id': tenant.pk,
+                'org_name': tenant.name,
+                'org_address': tenant.address,
+                'org_phone': tenant.contact_phone,
+                'org_email': tenant.contact_email,
+            },
+        )
+        plan = SubscriptionPlan.objects.filter(code=self.cleaned_data['subscription_plan'], is_active=True).first()
+        if plan and plan.code == 'trial':
+            now = timezone.now()
+            TenantSubscription.objects.create(
+                tenant=tenant,
+                plan=plan,
+                starts_at=now,
+                ends_at=now + timedelta(days=plan.duration_days),
+                status='active',
+            )
+        return tenant, user
+
+
+class TenantModelFormMixin:
+    tenant = None
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        self.tenant = tenant
+        super().__init__(*args, **kwargs)
+
+    def tenant_unique_exists(self, model, field_name, value):
+        if not self.tenant or value in (None, ''):
+            return False
+        qs = model.objects.filter(tenant=self.tenant, **{f"{field_name}__iexact": value})
+        if getattr(self, 'instance', None) is not None and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        return qs.exists()
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        if self.tenant is not None and hasattr(obj, 'tenant_id') and not obj.tenant_id:
+            obj.tenant = self.tenant
+        if commit:
+            obj.save()
+            if hasattr(self, 'save_m2m'):
+                self.save_m2m()
+        return obj
+
+
+class UserCreateForm(forms.ModelForm):
+    password1 = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+            "placeholder": "Set a password"
+        }),
+        label="Password"
+    )
+    password2 = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+            "placeholder": "Confirm password"
+        }),
+        label="Confirm Password"
+    )
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.order_by('name'),
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            "class": "form-select js-enhance-select",
+            "multiple": "multiple",
+            "data-placeholder": "Assign groups/roles",
+            "data-max-items": "50",
+        }),
+        label="Groups / Roles",
+        help_text="Select one or more roles for this user."
+    )
+    is_staff = forms.BooleanField(initial=True, required=False, label="Staff access")
+    is_active = forms.BooleanField(initial=True, required=False, label="Active")
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'is_staff', 'is_active', 'groups']
+        widgets = {
+            'username': forms.TextInput(attrs={
+                "class": "form-control",
+                "autocomplete": "username",
+                "placeholder": "Login username"
+            }),
+            'email': forms.EmailInput(attrs={
+                "class": "form-control",
+                "autocomplete": "email",
+                "placeholder": "name@example.com"
+            }),
+        }
+
+    def clean(self):
+        c = super().clean()
+        if c.get('password1') != c.get('password2'):
+            self.add_error('password2', "Passwords do not match.")
+        return c
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.set_password(self.cleaned_data['password1'])
+        if commit:
+            user.save()
+            self.save_m2m()
+            user.groups.set(self.cleaned_data.get('groups', []))
+        return user
+
+
+class UserEditForm(forms.ModelForm):
+    password1 = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+            "placeholder": "New password (optional)"
+        }),
+        required=False, label="New Password"
+    )
+    password2 = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+            "placeholder": "Confirm new password"
+        }),
+        required=False, label="Confirm New Password"
+    )
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.order_by('name'),
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            "class": "form-select js-enhance-select",
+            "multiple": "multiple",
+            "data-placeholder": "Assign groups/roles",
+            "data-max-items": "50",
+        }),
+        label="Groups / Roles"
+    )
+    is_staff = forms.BooleanField(required=False, label="Staff access")
+    is_active = forms.BooleanField(required=False, label="Active")
+
+    class Meta:
+        model = User
+        fields = ['email', 'is_staff', 'is_active', 'groups']
+        widgets = {
+            'email': forms.EmailInput(attrs={
+                "class": "form-control",
+                "autocomplete": "email",
+                "placeholder": "name@example.com"
+            }),
+        }
+
+    def clean(self):
+        c = super().clean()
+        p1, p2 = c.get('password1'), c.get('password2')
+        if p1 or p2:
+            if p1 != p2:
+                self.add_error('password2', "Passwords do not match.")
+        return c
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if self.cleaned_data.get('password1'):
+            user.set_password(self.cleaned_data['password1'])
+        if commit:
+            user.save()
+            self.save_m2m()
+            user.groups.set(self.cleaned_data.get('groups', []))
+        return user
+
+
+class RoleForm(forms.ModelForm):
+    class Meta:
+        model = Group
+        fields = ['name']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Role name (e.g., Cashier, Manager)"
+            })
+        }
+
+
+class RolePermissionForm(forms.Form):
+    permissions = forms.ModelMultipleChoiceField(
+        queryset=Permission.objects.filter(content_type__app_label='posapp').order_by('codename'),
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            "class": "form-select js-enhance-select",
+            "multiple": "multiple",
+            "data-placeholder": "Select permissions",
+            "data-max-items": "200",
+        }),
+        help_text="Attach permissions to this role."
+    )
+
+# ---------------------------
+# Master Data Forms
+# ---------------------------
+
+class ProductForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = [
+            'code','barcode','name','batch_no','manufacture_date','expiry_date',
+            'category','unit_price','cost_price','tax_percent','reorder_level','is_active'
+        ]
+        widgets = {
+            'code': forms.TextInput(attrs={"class": "form-control", "autofocus": "autofocus", "placeholder": "Unique code (e.g., PEN-001)"}),
+            'barcode': forms.TextInput(attrs={"class": "form-control", "placeholder": "EAN-13 / Code128 / custom"}),
+            'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Product name"}),
+            'batch_no': forms.TextInput(attrs={"class": "form-control", "placeholder": "Batch number"}),
+            'manufacture_date': forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            'expiry_date': forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            'category': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-allow-clear": "true",
+                "data-placeholder": "Select a category",
+            }),
+            'unit_price': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "Selling price"}),
+            'cost_price': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "Cost price"}),
+            'tax_percent': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "GST %"}),
+            'reorder_level': forms.NumberInput(attrs={"class": "form-control", "min": "0", "placeholder": "Warn at qty"}),
+            'is_active': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields['category'].queryset = Category.objects.filter(tenant=self.tenant).order_by('name')
+        else:
+            self.fields['category'].queryset = Category.objects.none()
+
+    def clean_code(self):
+        code = self.cleaned_data['code'].strip()
+        if self.tenant_unique_exists(Product, 'code', code):
+            raise ValidationError("This product code already exists for this tenant.")
+        return code
+
+    def clean_barcode(self):
+        barcode = (self.cleaned_data.get('barcode') or '').strip() or None
+        if barcode and self.tenant_unique_exists(Product, 'barcode', barcode):
+            raise ValidationError("This barcode already exists for this tenant.")
+        return barcode
+
+
+class ProductSetForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = ProductSet
+        fields = ['code', 'name', 'unit_price', 'tax_percent', 'is_active']
+        widgets = {
+            'code': forms.TextInput(attrs={"class": "form-control", "autofocus": "autofocus", "placeholder": "Unique code (e.g., CLASS10-SET)"}),
+            'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Set name (e.g., 10 Class Set)"}),
+            'unit_price': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "Selling price"}),
+            'tax_percent': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "GST %"}),
+            'is_active': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_code(self):
+        code = self.cleaned_data['code'].strip()
+        if self.tenant_unique_exists(ProductSet, 'code', code):
+            raise ValidationError("This set code already exists for this tenant.")
+        return code
+
+
+class CategoryForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Category
+        fields = ['name']
+        widgets = {
+            'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Category name"})
+        }
+
+    def clean_name(self):
+        name = self.cleaned_data['name'].strip()
+        if self.tenant_unique_exists(Category, 'name', name):
+            raise ValidationError("This category already exists for this tenant.")
+        return name
+
+
+class SupplierForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Supplier
+        fields = ['name','phone','email']
+        widgets = {
+            'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Supplier name"}),
+            'phone': forms.TextInput(attrs={"class": "form-control", "placeholder": "Phone"}),
+            'email': forms.EmailInput(attrs={"class": "form-control", "placeholder": "Email"}),
+        }
+
+
+class CustomerForm(TenantModelFormMixin, forms.ModelForm):
+    """Extended for credit system."""
+    class Meta:
+        model = Customer
+        fields = ['name','phone','email','credit_limit','sms_opt_in','call_opt_in']
+        widgets = {
+            'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Customer name"}),
+            'phone': forms.TextInput(attrs={"class": "form-control", "placeholder": "Phone"}),
+            'email': forms.EmailInput(attrs={"class": "form-control", "placeholder": "Email"}),
+            'credit_limit': forms.NumberInput(attrs={
+                "class": "form-control", "step": "0.01", "min": "0", "placeholder": "0.00"
+            }),
+            'sms_opt_in': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'call_opt_in': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+# ---------------------------
+# Transactions
+# ---------------------------
+
+class PurchaseForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Purchase
+        fields = ['supplier','date','notes']
+        widgets = {
+            'supplier': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-allow-clear": "true",
+                "data-placeholder": "Select supplier",
+            }),
+            'date': forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            'notes': forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Optional notes"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields['supplier'].queryset = Supplier.objects.filter(tenant=self.tenant).order_by('name')
+        else:
+            self.fields['supplier'].queryset = Supplier.objects.none()
+
+
+class SaleForm(TenantModelFormMixin, forms.ModelForm):
+    is_return = forms.BooleanField(required=False, label='Return (Credit Note)')
+    class Meta:
+        model = Sale
+        fields = ['customer','date','discount','payment_method','paid_amount','is_return']
+        widgets = {
+            'customer': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-allow-clear": "true",
+                "data-placeholder": "Walk-in (leave empty) or pick customer",
+            }),
+            'date': forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            'discount': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "0.00"}),
+            'payment_method': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-placeholder": "Payment method"
+            }),
+            'paid_amount': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "0.00"}),
+            'is_return': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.tenant is not None:
+            self.fields['customer'].queryset = Customer.objects.filter(tenant=self.tenant).order_by('name')
+        else:
+            self.fields['customer'].queryset = Customer.objects.none()
+
+# ---------------------------
+# Stock
+# ---------------------------
+
+class StockAdjustForm(forms.Form):
+    product = forms.ModelChoiceField(
+        queryset=Product.objects.none(),
+        required=True,
+        widget=forms.Select(attrs={
+            "class": "form-select js-enhance-select",
+            "data-allow-clear": "true",
+            "data-placeholder": "Select product",
+        })
+    )
+    qty = forms.IntegerField(
+        min_value=1, initial=1,
+        widget=forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+        help_text="Units to add to stock"
+    )
+    note = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Optional note"}),
+        help_text="Optional note for this stock adjustment"
+    )
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tenant is not None:
+            self.fields['product'].queryset = Product.objects.filter(
+                tenant=tenant,
+                is_active=True,
+            ).order_by('code')
+
+# ---------------------------
+# Settings
+# ---------------------------
+
+class SiteSettingForm(forms.ModelForm):
+    class Meta:
+        model = SiteSetting
+        fields = [
+            # Org/Bill
+            'org_name','org_address','org_phone','org_email',
+            'bill_title','bill_footer','bill_tax_inclusive','printer_type',
+            # Credit
+            'credit_enforce','credit_alert_threshold',
+            # SMS
+            'sms_enabled','sms_provider','sms_api_key','sms_sender',
+            # Calls
+            'call_enabled','call_provider','call_sid','call_token','call_from',
+        ]
+        widgets = {
+            'org_name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Your store name"}),
+            'org_address': forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Address as shown on bill"}),
+            'org_phone': forms.TextInput(attrs={"class": "form-control", "placeholder": "+91 …"}),
+            'org_email': forms.EmailInput(attrs={"class": "form-control", "placeholder": "billing@store.com"}),
+
+            'bill_title': forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g., TAX INVOICE"}),
+            'bill_footer': forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Footer note on invoices"}),
+            'bill_tax_inclusive': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'printer_type': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-placeholder": "Select printer type",
+            }),
+
+            'credit_enforce': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'credit_alert_threshold': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+
+            'sms_enabled': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'sms_provider': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-placeholder": "Choose SMS provider"
+            }),
+            'sms_api_key': forms.TextInput(attrs={"class": "form-control", "placeholder": "API key / token"}),
+            'sms_sender': forms.TextInput(attrs={"class": "form-control", "placeholder": "Sender ID (e.g., ACMECO)"}),
+
+            'call_enabled': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'call_provider': forms.Select(attrs={
+                "class": "form-select js-enhance-select",
+                "data-placeholder": "Choose call provider"
+            }),
+            'call_sid': forms.TextInput(attrs={"class": "form-control", "placeholder": "Account SID"}),
+            'call_token': forms.TextInput(attrs={"class": "form-control", "placeholder": "Auth token"}),
+            'call_from': forms.TextInput(attrs={"class": "form-control", "placeholder": "Caller ID / From number"}),
+        }
+
+# ---------------------------
+# Credit System – new utility forms
+# ---------------------------
+
+class ReceivePaymentForm(forms.Form):
+    """
+    Record a payment received from a customer.
+    Will translate to a CustomerLedger CREDIT (reduces balance).
+    """
+    customer = forms.ModelChoiceField(
+        queryset=Customer.objects.none(),
+        widget=forms.Select(attrs={
+            "class": "form-select js-enhance-select",
+            "data-allow-clear": "true",
+            "data-placeholder": "Select customer",
+        })
+    )
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"})
+    )
+    amount = forms.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01", "placeholder": "0.00"})
+    )
+    reference = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Txn Ref / UTR / Cheque #"})
+    )
+    note = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Optional note"})
+    )
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tenant is not None:
+            self.fields['customer'].queryset = Customer.objects.filter(tenant=tenant).order_by('name')
+
+
+class CustomerChargeForm(forms.Form):
+    """
+    Post a manual charge (opening balance, fee, adjustment).
+    Will translate to a CustomerLedger DEBIT (increases balance).
+    """
+    customer = forms.ModelChoiceField(
+        queryset=Customer.objects.none(),
+        widget=forms.Select(attrs={
+            "class": "form-select js-enhance-select",
+            "data-allow-clear": "true",
+            "data-placeholder": "Select customer",
+        })
+    )
+    date = forms.DateField(
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"})
+    )
+    amount = forms.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01", "placeholder": "0.00"})
+    )
+    reason = forms.CharField(
+        label="Reason / Description",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Opening balance / Adjustment / Fee"})
+    )
+    note = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Optional note"})
+    )
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tenant is not None:
+            self.fields['customer'].queryset = Customer.objects.filter(tenant=tenant).order_by('name')
+
+
+class CustomerStatementFilterForm(forms.Form):
+    customer = forms.ModelChoiceField(
+        queryset=Customer.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={
+            "class": "form-select js-enhance-select",
+            "data-allow-clear": "true",
+            "data-placeholder": "All customers",
+        })
+    )
+    start = forms.DateField(required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    end   = forms.DateField(required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tenant is not None:
+            self.fields['customer'].queryset = Customer.objects.filter(tenant=tenant).order_by('name')

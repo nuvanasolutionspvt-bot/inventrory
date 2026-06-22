@@ -1,0 +1,2342 @@
+[
+{
+  "model": "auth.group",
+  "fields": {
+    "name": "Admin",
+    "permissions": [
+      [
+        "can_adjust_stock",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_credit_charge",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_credit_receive",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_credit_view",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_manage_purchases",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_manage_settings",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_manage_users",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_pos",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_print_barcodes",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "can_view_reports",
+        "posapp",
+        "apppermission"
+      ],
+      [
+        "add_category",
+        "posapp",
+        "category"
+      ],
+      [
+        "change_category",
+        "posapp",
+        "category"
+      ],
+      [
+        "delete_category",
+        "posapp",
+        "category"
+      ],
+      [
+        "view_category",
+        "posapp",
+        "category"
+      ],
+      [
+        "add_customer",
+        "posapp",
+        "customer"
+      ],
+      [
+        "change_customer",
+        "posapp",
+        "customer"
+      ],
+      [
+        "delete_customer",
+        "posapp",
+        "customer"
+      ],
+      [
+        "view_customer",
+        "posapp",
+        "customer"
+      ],
+      [
+        "add_customerledger",
+        "posapp",
+        "customerledger"
+      ],
+      [
+        "change_customerledger",
+        "posapp",
+        "customerledger"
+      ],
+      [
+        "delete_customerledger",
+        "posapp",
+        "customerledger"
+      ],
+      [
+        "view_customerledger",
+        "posapp",
+        "customerledger"
+      ],
+      [
+        "add_product",
+        "posapp",
+        "product"
+      ],
+      [
+        "change_product",
+        "posapp",
+        "product"
+      ],
+      [
+        "delete_product",
+        "posapp",
+        "product"
+      ],
+      [
+        "view_product",
+        "posapp",
+        "product"
+      ],
+      [
+        "add_productset",
+        "posapp",
+        "productset"
+      ],
+      [
+        "change_productset",
+        "posapp",
+        "productset"
+      ],
+      [
+        "delete_productset",
+        "posapp",
+        "productset"
+      ],
+      [
+        "view_productset",
+        "posapp",
+        "productset"
+      ],
+      [
+        "add_productsetitem",
+        "posapp",
+        "productsetitem"
+      ],
+      [
+        "change_productsetitem",
+        "posapp",
+        "productsetitem"
+      ],
+      [
+        "delete_productsetitem",
+        "posapp",
+        "productsetitem"
+      ],
+      [
+        "view_productsetitem",
+        "posapp",
+        "productsetitem"
+      ],
+      [
+        "add_purchase",
+        "posapp",
+        "purchase"
+      ],
+      [
+        "change_purchase",
+        "posapp",
+        "purchase"
+      ],
+      [
+        "delete_purchase",
+        "posapp",
+        "purchase"
+      ],
+      [
+        "view_purchase",
+        "posapp",
+        "purchase"
+      ],
+      [
+        "add_purchaseitem",
+        "posapp",
+        "purchaseitem"
+      ],
+      [
+        "change_purchaseitem",
+        "posapp",
+        "purchaseitem"
+      ],
+      [
+        "delete_purchaseitem",
+        "posapp",
+        "purchaseitem"
+      ],
+      [
+        "view_purchaseitem",
+        "posapp",
+        "purchaseitem"
+      ],
+      [
+        "add_sale",
+        "posapp",
+        "sale"
+      ],
+      [
+        "change_sale",
+        "posapp",
+        "sale"
+      ],
+      [
+        "delete_sale",
+        "posapp",
+        "sale"
+      ],
+      [
+        "view_sale",
+        "posapp",
+        "sale"
+      ],
+      [
+        "add_saleitem",
+        "posapp",
+        "saleitem"
+      ],
+      [
+        "change_saleitem",
+        "posapp",
+        "saleitem"
+      ],
+      [
+        "delete_saleitem",
+        "posapp",
+        "saleitem"
+      ],
+      [
+        "view_saleitem",
+        "posapp",
+        "saleitem"
+      ],
+      [
+        "add_sitesetting",
+        "posapp",
+        "sitesetting"
+      ],
+      [
+        "can_manage_settings",
+        "posapp",
+        "sitesetting"
+      ],
+      [
+        "change_sitesetting",
+        "posapp",
+        "sitesetting"
+      ],
+      [
+        "delete_sitesetting",
+        "posapp",
+        "sitesetting"
+      ],
+      [
+        "view_sitesetting",
+        "posapp",
+        "sitesetting"
+      ],
+      [
+        "add_stockmove",
+        "posapp",
+        "stockmove"
+      ],
+      [
+        "change_stockmove",
+        "posapp",
+        "stockmove"
+      ],
+      [
+        "delete_stockmove",
+        "posapp",
+        "stockmove"
+      ],
+      [
+        "view_stockmove",
+        "posapp",
+        "stockmove"
+      ],
+      [
+        "add_supplier",
+        "posapp",
+        "supplier"
+      ],
+      [
+        "change_supplier",
+        "posapp",
+        "supplier"
+      ],
+      [
+        "delete_supplier",
+        "posapp",
+        "supplier"
+      ],
+      [
+        "view_supplier",
+        "posapp",
+        "supplier"
+      ],
+      [
+        "add_tenant",
+        "posapp",
+        "tenant"
+      ],
+      [
+        "change_tenant",
+        "posapp",
+        "tenant"
+      ],
+      [
+        "delete_tenant",
+        "posapp",
+        "tenant"
+      ],
+      [
+        "view_tenant",
+        "posapp",
+        "tenant"
+      ],
+      [
+        "add_tenantmembership",
+        "posapp",
+        "tenantmembership"
+      ],
+      [
+        "change_tenantmembership",
+        "posapp",
+        "tenantmembership"
+      ],
+      [
+        "delete_tenantmembership",
+        "posapp",
+        "tenantmembership"
+      ],
+      [
+        "view_tenantmembership",
+        "posapp",
+        "tenantmembership"
+      ]
+    ]
+  }
+},
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$VBWGvG67lWHfX1ncZXo0ez$64k4aJFgw+LEKoTo5hi9oE600R/9NC1e1lAzWoGj5uo=",
+    "last_login": "2026-06-21T13:16:57.737Z",
+    "is_superuser": true,
+    "username": "admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "admin@pos.local",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-05-08T11:09:07.339Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$AfLpy8udnBcdawu07zI67Q$LjUGNjPP+zQMz0degP6HhssUgf23GoDruwyJ3diw4+4=",
+    "last_login": "2026-06-21T17:06:16.591Z",
+    "is_superuser": false,
+    "username": "Yaser",
+    "first_name": "Yaser",
+    "last_name": "",
+    "email": "arfat2@gmail.com",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-06-21T10:48:00.438Z",
+    "groups": [
+      [
+        "Admin"
+      ]
+    ],
+    "user_permissions": []
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "0bhxutunxx1k8a4b4jyn05lhhj72emj4",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyFAoVCP3vsNZLu72KqhSaFejP9ua3rQ67yZl3mJCGsd41p4iROJs9Di9JsNgHfOO6Ab5Osscc51mQa5V-RBi-xn4sfl6P4JRijjtg5NGwi1sc57g9p3iYjYJkUwaO-4o1Y53xkCQEXBsYEmadUEiz44mzYpYJ2eHCtnyPV7Vr8_x4s_SQ:1wbGVa:6ZhSjWoaADmbtza3U1m4r6a0IBLFs09wyMdtBMCICdI",
+    "expire_date": "2026-07-05T11:38:38.826Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "0jtt6262hx6u6vi99iqi1wankkarl8hi",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyFAoVCP3vsNZLu72KqhSaFejP9ua3rQ67yZl3mJCGsd41p4iROJs9Di9JsNgHfOO6Ab5Osscc51mQa5V-RBi-xn4sfl6P4JRijjtg5NGwi1sc57g9p3iYjYJkUwaO-4o1Y53xkCQEXBsYEmadUEiz44mzYpYJ2eHCtnyPV7Vr8_x4s_SQ:1wbI2b:zOh_uGuRYh-RUWdC9jRnjqumHQ08k3U9mQt8eFA3C3I",
+    "expire_date": "2026-07-05T13:16:49.190Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "4hmsrq5gl6n07ys4up0krqswgtu69div",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyGFQqEevfcbyO6y2KqhSUu9GP9danrQ67w3k3mJAFsZw7byEqYozqIVp98Mge6cdxBvkK-zpDmXZUK5K_KgqxzmyI_L4f4NjLCOta07o1QTsdfadZ4dJtbGOUJL1pjGQqWc2qoYHRMpb1OHHn3foqdGqzoKVKYnh8IZcvmeVe8PnFA-oA:1wbG1e:XyuDrw7WDUmFRPLfzMl2RaOzHMPX6R0z3_S-4GipjFU",
+    "expire_date": "2026-07-05T11:07:42.570Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "765un58m6i2hmgc3ndoqn547lcdsjqix",
+  "fields": {
+    "session_data": ".eJxVjEEOwiAQRe_C2pAOBZm6dN8zNDMMSNVAUtqV8e7apAvd_vfef6mJtjVPW4vLNIu6KFCn340pPGLZgdyp3KoOtazLzHpX9EGbHqvE5_Vw_w4ytfytHQ7Y2UTs2YhgcGfkYLztHSCDjdZxSkjQUR8oog8WnCGfGAwMyYt6fwDi8jgC:1wLQ54:3Bs3zBkI1JjXtYNYhpIWuge4LyQiiB9jJHJNk7lXe6E",
+    "expire_date": "2026-05-22T18:37:46.400Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "7o2imitlj0jm4e5l1475brtg0f6l2j78",
+  "fields": {
+    "session_data": ".eJxVjkEOwiAURO_C2pBC4Rdcuu8ZyAc-UjU0KdSN8e62pgvdzpt5mRdzuLbs1kqLmyI7M8VOv5nHcKeyg3jDcp15mEtbJs_3Cj9o5eMc6XE5un-CjDVva90NEqQVBpKKyQ9EypIRYEEDJOrIBiE1ddYE4yMM4GOQWvVWiF4JwE2KoU1Pco0KlvY9278_myk-cw:1wbG1e:cFilb9WUVwargbHriXdzmPYVr_KZAqSg7mfseG5FoGk",
+    "expire_date": "2026-07-05T11:07:42.858Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "8sop0df26a2v5zeo9klzknr0ajauf3cb",
+  "fields": {
+    "session_data": ".eJxVjsEOgjAQRP-lZ9NQWFbr0Tvf0Ox2t4KakkDxYvx3wXDQzG3mzWReJtBS-rDMOoVBzNm05vDrMcW75i2QG-XraOOYyzSw3RC7p7PtRtHHZWf_Bnqa-7VdK1WxgToB-FYaciwpkQpwUkQ6cSNAvAojemTfAroj-MpLdLV3uI5SLMNTQ9FMuXzPwvsDB-Y__w:1wbG2P:TMC-gyRX7_5MJMwL66d7r_v_3BkUmXdI-4Gd6wEd2bI",
+    "expire_date": "2026-07-05T11:08:29.836Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "fhwrvrn5eqs0rhxtcb1rezhuihu6542k",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyFAoVCP3vsNZLu72KqhSaFejP9ua3rQ67yZl3mJCGsd41p4iROJs9Di9JsNgHfOO6Ab5Osscc51mQa5V-RBi-xn4sfl6P4JRijjtg5NGwi1sc57g9p3iYjYJkUwaO-4o1Y53xkCQEXBsYEmadUEiz44mzYpYJ2eHCtnyPV7Vr8_x4s_SQ:1wbGIb:e7j2XggtcNkpKrMlhenjw9UKIjatXinNjt0PC-EVccA",
+    "expire_date": "2026-07-05T11:25:13.956Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "hrkx0d174prktms3ho1b8uchaqq8zo1t",
+  "fields": {
+    "session_data": ".eJxVjMsOwiAQRf-FtSE8C7h07zeQYQakaiAp7cr479qkC93ec859sQjbWuM28hJnYmcm2el3S4CP3HZAd2i3zrG3dZkT3xV-0MGvnfLzcrh_BxVG_dZeT55QKmOdUyhdKESUTREESTqbA03CuqAIAAV5mxXoIoX2Bp23prD3B-IGN90:1wbFO7:PP6ONsZBYm4Aa3R519GPV5VAs_7Ro3k4EkC4M7v_tuE",
+    "expire_date": "2026-07-05T10:26:51.189Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "ijzy099dvz3x3zz66euccwk3gk6fjhzh",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyFAoVCP3vsNZLu72KqhSaFejP9ua3rQ67yZl3mJCGsd41p4iROJs9Di9JsNgHfOO6Ab5Osscc51mQa5V-RBi-xn4sfl6P4JRijjtg5NGwi1sc57g9p3iYjYJkUwaO-4o1Y53xkCQEXBsYEmadUEiz44mzYpYJ2eHCtnyPV7Vr8_x4s_SQ:1wbI2k:qwKDou9wlnMcvP9XZT0pcCtOCQ9R4paZZl6Eo_Oeu_A",
+    "expire_date": "2026-07-05T13:16:58.158Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "j6j9g7lhdbjsnimjac6gvz3f153x3rql",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyFAoVCP3vsNZLu72KqhSaFejP9ua3rQ67yZl3mJCGsd41p4iROJs9Di9JsNgHfOO6Ab5Osscc51mQa5V-RBi-xn4sfl6P4JRijjtg5NGwi1sc57g9p3iYjYJkUwaO-4o1Y53xkCQEXBsYEmadUEiz44mzYpYJ2eHCtnyPV7Vr8_x4s_SQ:1wbGJ9:weh_22anQF_4A66oqdsbv62-tLnGBVr_6FJN-XawjRk",
+    "expire_date": "2026-07-05T11:25:47.854Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "j91fufu5lp2tvpeww938kp4w3e1cxxtb",
+  "fields": {
+    "session_data": ".eJxVjsEOwiAQRP-FsyFAoVCP3vsNZLu72KqhSaFejP9ua3rQ67yZl3mJCGsd41p4iROJs9Di9JsNgHfOO6Ab5Osscc51mQa5V-RBi-xn4sfl6P4JRijjtg5NGwi1sc57g9p3iYjYJkUwaO-4o1Y53xkCQEXBsYEmadUEiz44mzYpYJ2eHCtnyPV7Vr8_x4s_SQ:1wbGad:rePyZSbfF89reR72ayjEaPK4pqTZeYgsyGkI4VWbcG0",
+    "expire_date": "2026-07-05T11:43:51.898Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "uwrsk4hycpeqm9jeooae3kztr6h8k33t",
+  "fields": {
+    "session_data": ".eJxVjkEOwiAQRe_C2hCYAaEu3fcMZGDAVg1NWurGeHet6UK3_728_KcItLYhrEuew8jiJEAcfrdI6ZbrBvhK9TLJNNU2j1FuitzpIvuJ8_28u3-BgZZhyzrb8ZEBnEtQMGZLgNkUA4iFrcIOmZVSzjifvCGtE3qIoL23RaP5RCm18ZFDy5Vq-56F1xuR9j4X:1wbLce:50T66FkIldWN1nv_T1nrgz23JIl9FbIwZelNhH01gtY",
+    "expire_date": "2026-07-05T17:06:16.730Z"
+  }
+},
+{
+  "model": "posapp.tenant",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-06-21T10:39:18.383Z",
+    "updated_at": "2026-06-21T10:39:18.383Z",
+    "name": "Default Store",
+    "slug": "default-store",
+    "business_type": "retail_store",
+    "owner_name": "admin",
+    "contact_email": "admin@pos.local",
+    "contact_phone": "",
+    "address": "",
+    "city": "",
+    "state": "",
+    "postal_code": "",
+    "country": "India",
+    "tax_id": "",
+    "plan": "starter",
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.tenant",
+  "pk": 2,
+  "fields": {
+    "created_at": "2026-06-21T10:48:00.437Z",
+    "updated_at": "2026-06-21T10:48:00.437Z",
+    "name": "Noor medical",
+    "slug": "noor001",
+    "business_type": "pharmacy",
+    "owner_name": "Yaser",
+    "contact_email": "arfat2@gmail.com",
+    "contact_phone": "9657575187",
+    "address": "nanded",
+    "city": "nanded",
+    "state": "maharshtra",
+    "postal_code": "431605",
+    "country": "India",
+    "tax_id": "",
+    "plan": "starter",
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.subscriptionplan",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-06-21T13:16:36.799Z",
+    "updated_at": "2026-06-21T13:16:36.799Z",
+    "code": "trial",
+    "name": "Free Trial",
+    "price": "0.00",
+    "duration_days": 7,
+    "is_paid": false,
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.subscriptionplan",
+  "pk": 2,
+  "fields": {
+    "created_at": "2026-06-21T13:16:36.831Z",
+    "updated_at": "2026-06-21T13:16:36.831Z",
+    "code": "monthly",
+    "name": "Monthly Plan",
+    "price": "299.00",
+    "duration_days": 30,
+    "is_paid": true,
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.subscriptionplan",
+  "pk": 3,
+  "fields": {
+    "created_at": "2026-06-21T13:16:36.880Z",
+    "updated_at": "2026-06-21T13:16:36.880Z",
+    "code": "yearly",
+    "name": "Yearly Plan",
+    "price": "3500.00",
+    "duration_days": 365,
+    "is_paid": true,
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.tenantmembership",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-06-21T10:39:18.383Z",
+    "updated_at": "2026-06-21T10:39:18.383Z",
+    "tenant": 1,
+    "user": [
+      "admin"
+    ],
+    "role": "owner",
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.tenantmembership",
+  "pk": 2,
+  "fields": {
+    "created_at": "2026-06-21T10:48:01.186Z",
+    "updated_at": "2026-06-21T10:48:01.186Z",
+    "tenant": 2,
+    "user": [
+      "Yaser"
+    ],
+    "role": "owner",
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.product",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-05-08T11:21:35.465Z",
+    "updated_at": "2026-05-08T11:23:00.289Z",
+    "tenant": 1,
+    "code": "ip2",
+    "barcode": "-",
+    "name": "Salbetol -2 (Salbutamol Tablets IP 2 mg)",
+    "batch_no": "469D005",
+    "manufacture_date": "2025-01-02",
+    "expiry_date": "2026-01-02",
+    "category": null,
+    "unit_price": "12.00",
+    "cost_price": "12.00",
+    "tax_percent": "0.00",
+    "reorder_level": 0,
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.product",
+  "pk": 4,
+  "fields": {
+    "created_at": "2026-06-21T11:12:34.723Z",
+    "updated_at": "2026-06-21T11:13:13.019Z",
+    "tenant": 2,
+    "code": "011",
+    "barcode": null,
+    "name": "Paracetamole",
+    "batch_no": "PH02654",
+    "manufacture_date": "2025-06-21",
+    "expiry_date": "2028-02-01",
+    "category": null,
+    "unit_price": "5.00",
+    "cost_price": "5.00",
+    "tax_percent": "0.00",
+    "reorder_level": 0,
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.productset",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-05-08T18:40:51.224Z",
+    "updated_at": "2026-05-08T18:40:51.224Z",
+    "tenant": 1,
+    "code": "11",
+    "name": "chcia",
+    "unit_price": "12.00",
+    "tax_percent": "0.00",
+    "is_active": true
+  }
+},
+{
+  "model": "posapp.productsetitem",
+  "pk": 1,
+  "fields": {
+    "product_set": 1,
+    "product": 1,
+    "qty": 1
+  }
+},
+{
+  "model": "posapp.supplier",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-06-21T11:18:21.969Z",
+    "updated_at": "2026-06-21T11:18:21.969Z",
+    "tenant": 2,
+    "name": "madni",
+    "phone": "+919657575187",
+    "email": "madni@gmal.com"
+  }
+},
+{
+  "model": "posapp.purchase",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-06-21T11:18:41.862Z",
+    "updated_at": "2026-06-21T11:18:41.867Z",
+    "tenant": 2,
+    "supplier": null,
+    "date": "2026-06-21",
+    "total": "2500.00",
+    "notes": ""
+  }
+},
+{
+  "model": "posapp.purchase",
+  "pk": 2,
+  "fields": {
+    "created_at": "2026-06-21T11:19:36.422Z",
+    "updated_at": "2026-06-21T11:19:36.425Z",
+    "tenant": 2,
+    "supplier": 1,
+    "date": "2026-06-21",
+    "total": "3000.00",
+    "notes": ""
+  }
+},
+{
+  "model": "posapp.purchaseitem",
+  "pk": 1,
+  "fields": {
+    "purchase": 1,
+    "product": 4,
+    "qty": 500,
+    "cost_price": "5.00",
+    "line_total": "2500.00"
+  }
+},
+{
+  "model": "posapp.purchaseitem",
+  "pk": 2,
+  "fields": {
+    "purchase": 2,
+    "product": 4,
+    "qty": 600,
+    "cost_price": "5.00",
+    "line_total": "3000.00"
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-05-08T11:22:02.549Z",
+    "updated_at": "2026-05-08T11:22:02.549Z",
+    "tenant": 1,
+    "customer": null,
+    "date": "2026-05-08",
+    "subtotal": "0.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "0.00",
+    "paid_amount": "0.00",
+    "payment_method": "cash",
+    "created_by": [
+      "admin"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 2,
+  "fields": {
+    "created_at": "2026-05-08T11:23:20.093Z",
+    "updated_at": "2026-05-08T11:23:20.093Z",
+    "tenant": 1,
+    "customer": null,
+    "date": "2026-05-08",
+    "subtotal": "12.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "12.00",
+    "paid_amount": "12.00",
+    "payment_method": "cash",
+    "created_by": [
+      "admin"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 3,
+  "fields": {
+    "created_at": "2026-05-08T18:38:58.842Z",
+    "updated_at": "2026-05-08T18:38:58.842Z",
+    "tenant": 1,
+    "customer": null,
+    "date": "2026-05-09",
+    "subtotal": "120.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "120.00",
+    "paid_amount": "120.00",
+    "payment_method": "cash",
+    "created_by": [
+      "admin"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 4,
+  "fields": {
+    "created_at": "2026-05-08T18:41:07.456Z",
+    "updated_at": "2026-05-08T18:41:07.456Z",
+    "tenant": 1,
+    "customer": null,
+    "date": "2026-05-09",
+    "subtotal": "12.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "12.00",
+    "paid_amount": "12.00",
+    "payment_method": "cash",
+    "created_by": [
+      "admin"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 5,
+  "fields": {
+    "created_at": "2026-06-21T11:13:30.460Z",
+    "updated_at": "2026-06-21T11:32:08.304Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "10.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "10.00",
+    "paid_amount": "10.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 6,
+  "fields": {
+    "created_at": "2026-06-21T11:32:27.464Z",
+    "updated_at": "2026-06-21T11:32:27.464Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 7,
+  "fields": {
+    "created_at": "2026-06-21T11:40:07.877Z",
+    "updated_at": "2026-06-21T11:40:07.877Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 8,
+  "fields": {
+    "created_at": "2026-06-21T11:44:14.242Z",
+    "updated_at": "2026-06-21T11:44:14.242Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 9,
+  "fields": {
+    "created_at": "2026-06-21T11:45:12.946Z",
+    "updated_at": "2026-06-21T11:45:12.946Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 10,
+  "fields": {
+    "created_at": "2026-06-21T11:47:38.695Z",
+    "updated_at": "2026-06-21T11:47:38.695Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 11,
+  "fields": {
+    "created_at": "2026-06-21T11:48:53.523Z",
+    "updated_at": "2026-06-21T11:48:53.523Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 12,
+  "fields": {
+    "created_at": "2026-06-21T11:49:18.500Z",
+    "updated_at": "2026-06-21T11:49:18.500Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 13,
+  "fields": {
+    "created_at": "2026-06-21T11:57:27.623Z",
+    "updated_at": "2026-06-21T11:57:27.623Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 14,
+  "fields": {
+    "created_at": "2026-06-21T11:57:38.826Z",
+    "updated_at": "2026-06-21T11:57:38.826Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 15,
+  "fields": {
+    "created_at": "2026-06-21T11:59:47.173Z",
+    "updated_at": "2026-06-21T11:59:47.173Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 16,
+  "fields": {
+    "created_at": "2026-06-21T12:00:08.892Z",
+    "updated_at": "2026-06-21T12:00:08.892Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 17,
+  "fields": {
+    "created_at": "2026-06-21T12:02:11.523Z",
+    "updated_at": "2026-06-21T12:02:11.523Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 18,
+  "fields": {
+    "created_at": "2026-06-21T12:13:20.461Z",
+    "updated_at": "2026-06-21T12:13:20.461Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 19,
+  "fields": {
+    "created_at": "2026-06-21T12:15:33.005Z",
+    "updated_at": "2026-06-21T12:15:33.005Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 20,
+  "fields": {
+    "created_at": "2026-06-21T12:16:15.029Z",
+    "updated_at": "2026-06-21T12:16:15.029Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 21,
+  "fields": {
+    "created_at": "2026-06-21T12:18:43.311Z",
+    "updated_at": "2026-06-21T12:18:43.312Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 22,
+  "fields": {
+    "created_at": "2026-06-21T12:25:29.702Z",
+    "updated_at": "2026-06-21T12:25:29.702Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 23,
+  "fields": {
+    "created_at": "2026-06-21T12:34:32.677Z",
+    "updated_at": "2026-06-21T12:34:32.677Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 24,
+  "fields": {
+    "created_at": "2026-06-21T12:46:10.626Z",
+    "updated_at": "2026-06-21T12:46:10.626Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 25,
+  "fields": {
+    "created_at": "2026-06-21T12:46:27.393Z",
+    "updated_at": "2026-06-21T12:46:27.393Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 26,
+  "fields": {
+    "created_at": "2026-06-21T12:50:14.553Z",
+    "updated_at": "2026-06-21T12:50:14.553Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 27,
+  "fields": {
+    "created_at": "2026-06-21T12:59:42.125Z",
+    "updated_at": "2026-06-21T12:59:42.125Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 28,
+  "fields": {
+    "created_at": "2026-06-21T13:02:17.489Z",
+    "updated_at": "2026-06-21T13:02:17.489Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 29,
+  "fields": {
+    "created_at": "2026-06-21T13:04:23.022Z",
+    "updated_at": "2026-06-21T13:04:23.022Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.sale",
+  "pk": 30,
+  "fields": {
+    "created_at": "2026-06-21T13:05:53.763Z",
+    "updated_at": "2026-06-21T13:05:53.763Z",
+    "tenant": 2,
+    "customer": null,
+    "date": "2026-06-21",
+    "subtotal": "5.00",
+    "discount": "0.00",
+    "tax": "0.00",
+    "total": "5.00",
+    "paid_amount": "5.00",
+    "payment_method": "cash",
+    "created_by": [
+      "Yaser"
+    ],
+    "is_return": false
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 1,
+  "fields": {
+    "sale": 1,
+    "product": 1,
+    "product_set": null,
+    "description": "ip2 - Salbetol -2 (Salbutamol Tablets IP 2 mg)",
+    "details": "",
+    "qty": 1,
+    "unit_price": "0.00",
+    "line_total": "0.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 2,
+  "fields": {
+    "sale": 2,
+    "product": 1,
+    "product_set": null,
+    "description": "ip2 - Salbetol -2 (Salbutamol Tablets IP 2 mg)",
+    "details": "",
+    "qty": 1,
+    "unit_price": "12.00",
+    "line_total": "12.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 3,
+  "fields": {
+    "sale": 3,
+    "product": 1,
+    "product_set": null,
+    "description": "ip2 - Salbetol -2 (Salbutamol Tablets IP 2 mg)",
+    "details": "",
+    "qty": 10,
+    "unit_price": "12.00",
+    "line_total": "120.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 4,
+  "fields": {
+    "sale": 4,
+    "product": null,
+    "product_set": 1,
+    "description": "11 - chcia",
+    "details": "ip2 - Salbetol -2 (Salbutamol Tablets IP 2 mg) x 1",
+    "qty": 1,
+    "unit_price": "12.00",
+    "line_total": "12.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 8,
+  "fields": {
+    "sale": 5,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 2,
+    "unit_price": "5.00",
+    "line_total": "10.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 9,
+  "fields": {
+    "sale": 6,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 10,
+  "fields": {
+    "sale": 7,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 11,
+  "fields": {
+    "sale": 8,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 12,
+  "fields": {
+    "sale": 9,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 13,
+  "fields": {
+    "sale": 10,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 14,
+  "fields": {
+    "sale": 11,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 15,
+  "fields": {
+    "sale": 12,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 16,
+  "fields": {
+    "sale": 13,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 17,
+  "fields": {
+    "sale": 14,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 18,
+  "fields": {
+    "sale": 15,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 19,
+  "fields": {
+    "sale": 16,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 20,
+  "fields": {
+    "sale": 17,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 21,
+  "fields": {
+    "sale": 18,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 22,
+  "fields": {
+    "sale": 19,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 23,
+  "fields": {
+    "sale": 20,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 24,
+  "fields": {
+    "sale": 21,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 25,
+  "fields": {
+    "sale": 22,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 26,
+  "fields": {
+    "sale": 23,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 27,
+  "fields": {
+    "sale": 24,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 28,
+  "fields": {
+    "sale": 25,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 29,
+  "fields": {
+    "sale": 26,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 30,
+  "fields": {
+    "sale": 27,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 31,
+  "fields": {
+    "sale": 28,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 32,
+  "fields": {
+    "sale": 29,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.saleitem",
+  "pk": 33,
+  "fields": {
+    "sale": 30,
+    "product": 4,
+    "product_set": null,
+    "description": "011 - Paracetamole",
+    "details": "",
+    "qty": 1,
+    "unit_price": "5.00",
+    "line_total": "5.00",
+    "tax_percent": "0.00",
+    "tax_amount": "0.00"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 1,
+  "fields": {
+    "created_at": "2026-05-08T11:21:46.449Z",
+    "updated_at": "2026-05-08T11:21:46.449Z",
+    "tenant": 1,
+    "product": 1,
+    "change": 100,
+    "reason": "adjustment",
+    "ref": ""
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 2,
+  "fields": {
+    "created_at": "2026-05-08T11:22:02.551Z",
+    "updated_at": "2026-05-08T11:22:02.551Z",
+    "tenant": 1,
+    "product": 1,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-1"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 3,
+  "fields": {
+    "created_at": "2026-05-08T11:23:20.095Z",
+    "updated_at": "2026-05-08T11:23:20.095Z",
+    "tenant": 1,
+    "product": 1,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-2"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 4,
+  "fields": {
+    "created_at": "2026-05-08T18:38:58.844Z",
+    "updated_at": "2026-05-08T18:38:58.844Z",
+    "tenant": 1,
+    "product": 1,
+    "change": -10,
+    "reason": "sale",
+    "ref": "INV-3"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 5,
+  "fields": {
+    "created_at": "2026-05-08T18:41:07.458Z",
+    "updated_at": "2026-05-08T18:41:07.458Z",
+    "tenant": 1,
+    "product": 1,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-4"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 6,
+  "fields": {
+    "created_at": "2026-06-21T11:12:47.511Z",
+    "updated_at": "2026-06-21T11:12:47.511Z",
+    "tenant": 2,
+    "product": 4,
+    "change": 100,
+    "reason": "adjustment",
+    "ref": ""
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 8,
+  "fields": {
+    "created_at": "2026-06-21T11:18:41.866Z",
+    "updated_at": "2026-06-21T11:18:41.866Z",
+    "tenant": 2,
+    "product": 4,
+    "change": 500,
+    "reason": "purchase",
+    "ref": "PO-1"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 9,
+  "fields": {
+    "created_at": "2026-06-21T11:19:36.425Z",
+    "updated_at": "2026-06-21T11:19:36.425Z",
+    "tenant": 2,
+    "product": 4,
+    "change": 600,
+    "reason": "purchase",
+    "ref": "PO-2"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 12,
+  "fields": {
+    "created_at": "2026-06-21T11:32:08.305Z",
+    "updated_at": "2026-06-21T11:32:08.305Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -2,
+    "reason": "sale",
+    "ref": "INV-5"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 13,
+  "fields": {
+    "created_at": "2026-06-21T11:32:27.466Z",
+    "updated_at": "2026-06-21T11:32:27.467Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-6"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 14,
+  "fields": {
+    "created_at": "2026-06-21T11:40:07.882Z",
+    "updated_at": "2026-06-21T11:40:07.882Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-7"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 15,
+  "fields": {
+    "created_at": "2026-06-21T11:44:14.244Z",
+    "updated_at": "2026-06-21T11:44:14.244Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-8"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 16,
+  "fields": {
+    "created_at": "2026-06-21T11:45:12.947Z",
+    "updated_at": "2026-06-21T11:45:12.947Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-9"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 17,
+  "fields": {
+    "created_at": "2026-06-21T11:47:38.697Z",
+    "updated_at": "2026-06-21T11:47:38.697Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-10"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 18,
+  "fields": {
+    "created_at": "2026-06-21T11:48:53.525Z",
+    "updated_at": "2026-06-21T11:48:53.525Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-11"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 19,
+  "fields": {
+    "created_at": "2026-06-21T11:49:18.500Z",
+    "updated_at": "2026-06-21T11:49:18.500Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-12"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 20,
+  "fields": {
+    "created_at": "2026-06-21T11:57:27.627Z",
+    "updated_at": "2026-06-21T11:57:27.627Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-13"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 21,
+  "fields": {
+    "created_at": "2026-06-21T11:57:38.828Z",
+    "updated_at": "2026-06-21T11:57:38.828Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-14"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 22,
+  "fields": {
+    "created_at": "2026-06-21T11:59:47.177Z",
+    "updated_at": "2026-06-21T11:59:47.177Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-15"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 23,
+  "fields": {
+    "created_at": "2026-06-21T12:00:08.896Z",
+    "updated_at": "2026-06-21T12:00:08.896Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-16"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 24,
+  "fields": {
+    "created_at": "2026-06-21T12:02:11.525Z",
+    "updated_at": "2026-06-21T12:02:11.525Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-17"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 25,
+  "fields": {
+    "created_at": "2026-06-21T12:13:20.464Z",
+    "updated_at": "2026-06-21T12:13:20.464Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-18"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 26,
+  "fields": {
+    "created_at": "2026-06-21T12:15:33.005Z",
+    "updated_at": "2026-06-21T12:15:33.005Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-19"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 27,
+  "fields": {
+    "created_at": "2026-06-21T12:16:15.031Z",
+    "updated_at": "2026-06-21T12:16:15.031Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-20"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 28,
+  "fields": {
+    "created_at": "2026-06-21T12:18:43.312Z",
+    "updated_at": "2026-06-21T12:18:43.312Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-21"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 29,
+  "fields": {
+    "created_at": "2026-06-21T12:25:29.702Z",
+    "updated_at": "2026-06-21T12:25:29.702Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-22"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 30,
+  "fields": {
+    "created_at": "2026-06-21T12:34:32.677Z",
+    "updated_at": "2026-06-21T12:34:32.677Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-23"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 31,
+  "fields": {
+    "created_at": "2026-06-21T12:46:10.628Z",
+    "updated_at": "2026-06-21T12:46:10.628Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-24"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 32,
+  "fields": {
+    "created_at": "2026-06-21T12:46:27.393Z",
+    "updated_at": "2026-06-21T12:46:27.393Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-25"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 33,
+  "fields": {
+    "created_at": "2026-06-21T12:50:14.555Z",
+    "updated_at": "2026-06-21T12:50:14.555Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-26"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 34,
+  "fields": {
+    "created_at": "2026-06-21T12:59:42.129Z",
+    "updated_at": "2026-06-21T12:59:42.129Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-27"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 35,
+  "fields": {
+    "created_at": "2026-06-21T13:02:17.491Z",
+    "updated_at": "2026-06-21T13:02:17.491Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-28"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 36,
+  "fields": {
+    "created_at": "2026-06-21T13:04:23.025Z",
+    "updated_at": "2026-06-21T13:04:23.025Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-29"
+  }
+},
+{
+  "model": "posapp.stockmove",
+  "pk": 37,
+  "fields": {
+    "created_at": "2026-06-21T13:05:53.765Z",
+    "updated_at": "2026-06-21T13:05:53.765Z",
+    "tenant": 2,
+    "product": 4,
+    "change": -1,
+    "reason": "sale",
+    "ref": "INV-30"
+  }
+},
+{
+  "model": "posapp.sitesetting",
+  "pk": 1,
+  "fields": {
+    "tenant": 1,
+    "org_name": "Default Store",
+    "org_address": "",
+    "org_phone": "",
+    "org_email": "admin@pos.local",
+    "bill_title": "Tax Invoice",
+    "bill_footer": "",
+    "bill_tax_inclusive": true,
+    "printer_type": "a4",
+    "credit_enforce": false,
+    "credit_alert_threshold": "80.00",
+    "sms_enabled": false,
+    "sms_provider": "textlocal",
+    "sms_api_key": "",
+    "sms_sender": "TXTLCL",
+    "call_enabled": false,
+    "call_provider": "twilio",
+    "call_sid": "",
+    "call_token": "",
+    "call_from": ""
+  }
+},
+{
+  "model": "posapp.sitesetting",
+  "pk": 2,
+  "fields": {
+    "tenant": 2,
+    "org_name": "Noor medical",
+    "org_address": "nanded",
+    "org_phone": "9657575187",
+    "org_email": "arfat2@gmail.com",
+    "bill_title": "Tax Invoice",
+    "bill_footer": "",
+    "bill_tax_inclusive": true,
+    "printer_type": "a4",
+    "credit_enforce": false,
+    "credit_alert_threshold": "80.00",
+    "sms_enabled": false,
+    "sms_provider": "textlocal",
+    "sms_api_key": "",
+    "sms_sender": "TXTLCL",
+    "call_enabled": false,
+    "call_provider": "twilio",
+    "call_sid": "",
+    "call_token": "",
+    "call_from": ""
+  }
+}
+]

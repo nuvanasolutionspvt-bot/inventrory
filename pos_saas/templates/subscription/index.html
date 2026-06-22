@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}Subscription - Nuvana POS{% endblock %}
+{% block breadcrumb %}Subscription{% endblock %}
+
+{% block content %}
+<style>
+  .subscription-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .subscription-title { margin: 0; font-size: 1.5rem; font-weight: 800; }
+  .subscription-meta { color: #667085; margin-top: 4px; }
+  .status-panel {
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 240px;
+    background: #fff;
+  }
+  .status-label { color: #667085; font-size: .82rem; font-weight: 700; text-transform: uppercase; }
+  .status-value { font-weight: 800; margin-top: 3px; }
+  .plan-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .plan-card {
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    padding: 18px;
+    background: #fff;
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+  }
+  .plan-name { font-size: 1.1rem; font-weight: 800; margin: 0; }
+  .plan-price { font-size: 2rem; font-weight: 900; margin: 10px 0 2px; }
+  .plan-duration { color: #667085; font-weight: 600; }
+  .plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+    color: #344054;
+    display: grid;
+    gap: 8px;
+  }
+  .plan-actions { margin-top: auto; }
+  @media (max-width: 900px) {
+    .subscription-head { display: block; }
+    .status-panel { margin-top: 14px; }
+    .plan-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="subscription-head">
+  <div>
+    <h1 class="subscription-title">Subscription</h1>
+    <div class="subscription-meta">{{ tenant.name }} - choose a plan for POS billing, reports, stock and users.</div>
+  </div>
+  <div class="status-panel">
+    <div class="status-label">Current plan</div>
+    {% if current_subscription %}
+      <div class="status-value">{{ current_subscription.plan.name }}</div>
+      <div class="text-muted small">Active until {{ current_subscription.ends_at|date:"d M Y" }}</div>
+    {% else %}
+      <div class="status-value">No active plan</div>
+      <div class="text-muted small">Start the free trial or choose a paid plan.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if not razorpay_configured %}
+  <div class="alert alert-warning">
+    Razorpay is not configured. Set <code>RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code> to enable paid plan checkout.
+  </div>
+{% endif %}
+
+<div class="plan-grid">
+  {% for plan in plans %}
+    <div class="plan-card">
+      <h2 class="plan-name">{{ plan.name }}</h2>
+      <div class="plan-price">
+        {% if plan.price == 0 %}Free{% else %}Rs. {{ plan.price|floatformat:0 }}{% endif %}
+      </div>
+      <div class="plan-duration">
+        {% if plan.code == 'trial' %}7 days trial{% elif plan.code == 'monthly' %}Monthly billing{% else %}Yearly billing{% endif %}
+      </div>
+      <ul class="plan-features">
+        <li><i class="bi bi-check2 me-1"></i>POS billing and invoice print</li>
+        <li><i class="bi bi-check2 me-1"></i>Products, stock and purchases</li>
+        <li><i class="bi bi-check2 me-1"></i>Reports and customer credit</li>
+      </ul>
+      <div class="plan-actions">
+        {% if current_subscription and current_subscription.plan_id == plan.id %}
+          <button class="btn btn-success w-100" disabled>Active</button>
+        {% elif plan.code == 'trial' %}
+          <form method="post" action="{% url 'subscription_trial' %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-primary w-100">Start 7-day free trial</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'subscription_checkout' plan.code %}">
+            {% csrf_token %}
+            <button class="btn btn-primary w-100" {% if not razorpay_configured %}disabled{% endif %}>
+              Pay with Razorpay
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

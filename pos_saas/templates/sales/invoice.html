@@ -1,0 +1,614 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ sale.is_return|yesno:"Credit Note,Invoice" }} #{{ sale.is_return|yesno:"CRN,INV" }}-{{ sale.id }} — Stationery POS{% endblock %}
+
+{% block content %}
+
+<div class="d-print-none mb-3 d-flex justify-content-between align-items-center">
+  <a href="javascript:history.back()" class="btn btn-light"><i class="bi bi-arrow-left"></i> Back</a>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<!-- INVOICE TABLE -->
+<div class="invoice-wrapper invoice-{{ printer_type|default:'a4' }}">
+  
+  <!-- Header -->
+  <div class="invoice-header">
+    <img src="{% static 'logo.png' %}" alt="Logo" class="logo" onerror="this.style.display='none'">
+    <h2 class="org-name">{{ org_name|default:"Your Organization Name" }}</h2>
+    <div class="org-info">
+      {{ org_address|default:"Street, City, State, ZIP" }}<br>
+      Ph: {{ org_phone|default:"000-000-0000" }}{% if org_email %} | {{ org_email }}{% endif %}
+    </div>
+  </div>
+
+  <!-- Invoice Info Table -->
+  <table class="info-table">
+    <tr>
+      <td class="label-cell">{{ sale.is_return|yesno:"Credit Note,Invoice" }}</td>
+      <td class="value-cell">{{ sale.is_return|yesno:"CRN,INV" }}-{{ sale.id }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Date</td>
+      <td class="value-cell">{{ sale.date }}</td>
+    </tr>
+    {% if sale.get_payment_method_display %}
+    <tr>
+      <td class="label-cell">Payment</td>
+      <td class="value-cell">{{ sale.get_payment_method_display }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  <!-- Customer Info -->
+  <div class="section-title">Bill To</div>
+  <table class="customer-table">
+    <tr>
+      <td>
+        {% if sale.customer %}
+          <strong>{{ sale.customer.name }}</strong><br>
+          {% if sale.customer.phone %}Ph: {{ sale.customer.phone }}<br>{% endif %}
+          {% if sale.customer.email %}Email: {{ sale.customer.email }}{% endif %}
+        {% else %}
+          Walk-in customer
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  <!-- Items Table -->
+  <div class="section-title">Items</div>
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th class="text-left">Item</th>
+        <th class="text-center">Qty</th>
+        <th class="text-center">Tax</th>
+        <th class="text-right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr class="item-row">
+        <td colspan="4" class="item-name">
+          {% if it.description %}{{ it.description }}{% elif it.product %}{{ it.product.name }}{% else %}Item{% endif %}
+          {% if it.details %}
+            <div class="item-components">{{ it.details|linebreaksbr }}</div>
+          {% endif %}
+        </td>
+      </tr>
+      <tr class="item-detail-row">
+        <td class="item-price">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ it.unit_price|floatformat:2 }} x {{ it.qty }}</td>
+        <td class="text-center">{{ it.qty }}</td>
+        <td class="text-center">{% if it.tax_percent %}{{ it.tax_percent|floatformat:0 }}%{% else %}-{% endif %}</td>
+        <td class="text-right">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ it.line_total|floatformat:2 }}</td>
+      </tr>
+      {% if it.tax_amount %}
+      <tr class="tax-row">
+        <td>Tax</td>
+        <td></td>
+        <td></td>
+        <td class="text-right">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ it.tax_amount|floatformat:2 }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Totals Table -->
+  <table class="totals-table">
+    <tr>
+      <td class="label-cell">Subtotal</td>
+      <td class="value-cell">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ sale.subtotal|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Discount</td>
+      <td class="value-cell">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ sale.discount|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Tax</td>
+      <td class="value-cell">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ sale.tax|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Paid</td>
+      <td class="value-cell">{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ sale.paid_amount|floatformat:2 }}</td>
+    </tr>
+    <tr class="grand-total">
+      <td class="label-cell"><strong>Grand Total</strong></td>
+      <td class="value-cell"><strong>{% if printer_type == 'thermal_58' or printer_type == 'thermal_80' %}Rs.{% else %}₹{% endif %} {{ sale.total|floatformat:2 }}</strong></td>
+    </tr>
+  </table>
+
+  {% if sale.is_return %}
+  <div class="return-note">Note: Credit note amounts are negative.</div>
+  {% endif %}
+
+  {% if sale.notes %}
+  <div class="section-title">Notes</div>
+  <table class="notes-table">
+    <tr>
+      <td>{{ sale.notes }}</td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <!-- Footer -->
+  <div class="invoice-footer">
+    <p>Thank you for your business.<br>
+    Keep this {{ sale.is_return|yesno:"credit note,invoice" }} for your records.</p>
+    <p class="footer-small">
+      {{ org_name|default:"Your Organization Name" }} • {{ org_phone|default:"000-000-0000" }}{% if org_email %} • {{ org_email }}{% endif %}<br>
+      Powered by Stationery POS
+    </p>
+  </div>
+
+</div>
+
+<style>
+/* ===== Invoice Print Styles ===== */
+:root {
+  --paper-width: 190mm;
+  --paper-padding: 14mm;
+  --font-size: 12px;
+  --print-margin: 10mm;
+  font-weight: 800!important;
+}
+
+{% if printer_type == 'thermal_80' %}
+:root {
+  --paper-width: 80mm;
+  --paper-padding: 8px;
+  --font-size: 11px;
+  --print-margin: 0;
+}
+{% elif printer_type == 'thermal_58' %}
+:root {
+  --paper-width: 58mm;
+  --paper-padding: 3px;
+  --font-size: 12px;
+  --print-margin: 0;
+}
+{% elif printer_type == 'label' %}
+:root {
+  --paper-width: 80mm;
+  --paper-padding: 6px;
+  --font-size: 10px;
+  --print-margin: 0;
+}
+{% endif %}
+
+@media screen { 
+  .invoice-wrapper { 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+    margin: 20px auto;
+  } 
+}
+
+.invoice-wrapper {
+  width: var(--paper-width);
+  max-width: var(--paper-width);
+  margin: 0 auto;
+  padding: var(--paper-padding);
+  background: #fff;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: var(--font-size);
+  color: #111;
+  line-height: 1.22;
+}
+
+.invoice-a4 {
+  min-height: 260mm;
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.35;
+}
+
+.invoice-a4 .invoice-header {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+
+.invoice-a4 .org-name {
+  font-size: 1.65em;
+}
+
+.invoice-a4 .items-table th,
+.invoice-a4 .items-table .item-detail-row td {
+  font-size: 1em;
+}
+
+.invoice-thermal_58 .logo,
+.invoice-label .logo {
+  max-height: 24px;
+}
+
+.invoice-thermal_58 .org-info,
+.invoice-label .org-info {
+  font-size: 0.92em;
+}
+
+.invoice-thermal_58 {
+  color: #000;
+  font-weight: 700;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.invoice-thermal_58 .org-name {
+  font-size: 1.18em;
+  font-weight: 900;
+}
+
+.invoice-thermal_58 td,
+.invoice-thermal_58 th {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+.invoice-thermal_58 .items-table th {
+  font-size: 0.95em;
+}
+
+.invoice-thermal_58 .items-table .item-detail-row td,
+.invoice-thermal_58 .item-price {
+  font-size: 0.95em;
+}
+
+.invoice-thermal_58 .customer-table,
+.invoice-thermal_58 .notes-table {
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.invoice-thermal_58 .items-table {
+  border-left: 0;
+  border-right: 0;
+  border-top: 2px solid #000;
+  border-bottom: 2px solid #000;
+}
+
+.invoice-thermal_58 .items-table th {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  border-bottom: 1px solid #000;
+}
+
+.invoice-thermal_58 .items-table th:nth-child(1) { width: 46%; }
+.invoice-thermal_58 .items-table th:nth-child(2) { width: 13%; }
+.invoice-thermal_58 .items-table th:nth-child(3) { width: 13%; }
+.invoice-thermal_58 .items-table th:nth-child(4) { width: 28%; }
+
+.invoice-thermal_58 .items-table tbody tr {
+  border-bottom: 1px solid #000;
+}
+
+.invoice-thermal_58 .items-table .item-row td {
+  background: #fff;
+  border: 0;
+  padding-top: 5px;
+  padding-bottom: 2px;
+}
+
+.invoice-thermal_58 .items-table .item-detail-row td,
+.invoice-thermal_58 .items-table .tax-row td {
+  border-left: 0;
+  border-right: 0;
+  padding-top: 2px;
+  padding-bottom: 5px;
+}
+
+/* Header */
+.invoice-header {
+  text-align: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #000;
+}
+
+.logo {
+  height: 36px;
+  width: auto;
+  margin-bottom: 4px;
+}
+
+.org-name { 
+  font-weight: 700; 
+  margin: 4px 0 2px 0; 
+  font-size: 1.1em; 
+}
+
+.org-info { 
+  font-weight: 600; 
+  font-size: 0.95em;
+  margin-bottom: 4px;
+}
+
+/* Section Titles */
+.section-title {
+  font-weight: 700;
+  margin: 8px 0 4px 0;
+  padding-top: 6px;
+  border-top: 1px dotted #000;
+}
+
+/* Common Table Styles */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6px;
+}
+
+td, th {
+  padding: 3px 4px;
+  font-weight: 600;
+}
+
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+/* Info Table */
+.info-table {
+  margin-top: 6px;
+}
+
+.info-table td {
+  padding: 2px 0;
+  border: none;
+}
+
+.info-table .label-cell {
+  width: 40%;
+  font-weight: 600;
+}
+
+.info-table .value-cell {
+  width: 60%;
+  text-align: right;
+  font-weight: 700;
+}
+
+/* Customer Table */
+.customer-table {
+  border: 1px solid #ddd;
+  background: #f9f9f9;
+}
+
+.customer-table td {
+  padding: 6px;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+/* Items Table */
+.items-table {
+  border: 1px solid #000;
+  margin-top: 4px;
+}
+
+.items-table thead {
+  color: #000;
+}
+
+.items-table th {
+  padding: 4px;
+  font-weight: 700;
+  font-size: 0.9em;
+  border: 1px solid #000;
+}
+
+.items-table tbody tr {
+  border-bottom: 1px solid #ddd;
+}
+
+.items-table .item-row td {
+  padding: 4px;
+  font-weight: 700;
+  background: #f5f5f5;
+  border: none;
+}
+
+.items-table .item-detail-row td {
+  padding: 3px 4px;
+  font-size: 0.9em;
+  border-left: 1px solid #ddd;
+}
+
+.items-table .item-detail-row td:first-child {
+  border-left: none;
+}
+
+.items-table .tax-row td {
+  padding: 2px 4px;
+  font-size: 0.85em;
+  font-style: italic;
+  border-left: 1px solid #ddd;
+}
+
+.items-table .tax-row td:first-child {
+  border-left: none;
+}
+
+.item-price {
+  font-size: 0.85em;
+}
+
+.item-components {
+  margin-top: 2px;
+  font-size: 0.82em;
+  font-weight: 500;
+  color: #333;
+  line-height: 1.25;
+}
+
+/* Totals Table */
+.totals-table {
+  margin-top: 8px;
+  border-top: 2px solid #000;
+  padding-top: 4px;
+}
+
+.totals-table td {
+  padding: 3px 0;
+  border: none;
+}
+
+.totals-table .label-cell {
+  width: 60%;
+  font-weight: 600;
+}
+
+.totals-table .value-cell {
+  width: 40%;
+  text-align: right;
+  font-weight: 700;
+}
+
+.totals-table .grand-total {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 2px solid #000;
+  font-size: calc(var(--font-size) * 1.15);
+}
+
+.totals-table .grand-total td {
+  padding: 4px 0;
+}
+
+/* Return Note */
+.return-note {
+  color: #d11;
+  font-weight: 700;
+  font-size: 0.9em;
+  text-align: center;
+  margin: 6px 0;
+  padding: 4px;
+  background: #fee;
+  border: 1px solid #d11;
+}
+
+/* Notes Table */
+.notes-table {
+  border: 1px solid #ddd;
+  background: #fffaed;
+  margin-top: 4px;
+}
+
+.notes-table td {
+  padding: 6px;
+  font-weight: 600;
+  font-size: 0.95em;
+  word-break: break-word;
+}
+
+/* Footer */
+.invoice-footer {
+  text-align: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dotted #000;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.footer-small {
+  font-size: 0.85em;
+  margin-top: 6px;
+  color: #666;
+}
+
+/* Print Styles */
+@page {
+  {% if printer_type == 'thermal_80' %}
+  size: 80mm auto;
+  margin: 0;
+  {% elif printer_type == 'thermal_58' %}
+  size: 58mm auto;
+  margin: 0;
+  {% elif printer_type == 'label' %}
+  size: 80mm auto;
+  margin: 0;
+  {% else %}
+  size: A4;
+  margin: 10mm;
+  {% endif %}
+}
+
+@media print {
+  {% if printer_type == 'a4' or not printer_type %}
+  :root { --font-size: 12px; --paper-padding: 0; }
+  {% elif printer_type == 'thermal_58' %}
+  :root { --font-size: 12px; --paper-padding: 0; }
+  {% else %}
+  :root { --font-size: 10.5px; }
+  {% endif %}
+  
+  html {
+    width: var(--paper-width);
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body { 
+    -webkit-print-color-adjust: exact; 
+    print-color-adjust: exact; 
+    margin: 0;
+    padding: 0 !important;
+    width: var(--paper-width);
+    color: #000 !important;
+    font-weight: 700;
+  }
+  
+  .navbar, .d-print-none, .btn, .alert { 
+    display: none !important; 
+  }
+  
+  .invoice-wrapper { 
+    box-shadow: none !important; 
+    padding: var(--paper-padding);
+    margin: 0 !important;
+    width: var(--paper-width) !important;
+    max-width: var(--paper-width) !important;
+    color: #000 !important;
+  }
+
+  .invoice-thermal_58 {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+  }
+
+  .invoice-wrapper,
+  .invoice-wrapper * {
+    text-shadow: none !important;
+    -webkit-font-smoothing: none;
+  }
+
+  .invoice-wrapper table,
+  .invoice-wrapper td,
+  .invoice-wrapper th,
+  .invoice-header,
+  .section-title,
+  .totals-table,
+  .invoice-footer {
+    border-color: #000 !important;
+  }
+  
+  .items-table thead {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  
+  .return-note {
+    background: #fee !important;
+    border: 1px solid #d11 !important;
+  }
+}
+
+
+</style>
+
+{% endblock %}

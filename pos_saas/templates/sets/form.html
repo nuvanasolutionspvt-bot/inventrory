@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% load widget_tweaks %}
+{% block title %}{{ title }} - Stationery POS{% endblock %}
+{% block breadcrumb %}Sets / {{ title }}{% endblock %}
+
+{% block content %}
+<form method="post" class="card shadow-sm" id="set-form" novalidate>
+  {% csrf_token %}
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <h5 class="m-0">{{ title }}</h5>
+    <a href="{% url 'product_set_list' %}" class="btn btn-sm btn-light">Back</a>
+  </div>
+
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Code</label>
+        {{ form.code }}
+        {% for e in form.code.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Set Name</label>
+        {{ form.name }}
+        {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Selling Price</label>
+        {{ form.unit_price }}
+        {% for e in form.unit_price.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Tax %</label>
+        {{ form.tax_percent }}
+        {% for e in form.tax_percent.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          {{ form.is_active }}
+          <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <div class="d-flex justify-content-between align-items-center">
+      <h6 class="m-0">Products in Set</h6>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="btn-add-set-row">
+        <i class="bi bi-plus-circle me-1"></i>Add Product
+      </button>
+    </div>
+
+    <div class="table-responsive mt-2">
+      <table class="table table-sm align-middle" id="set-items-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th style="width:140px;">Qty in Set</th>
+            <th style="width:52px;"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <input type="hidden" name="items_json" id="items_json" value="{{ items_json|escape }}">
+  </div>
+
+  <div class="card-footer bg-white">
+    <button class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Save Set</button>
+  </div>
+</form>
+
+<select id="product-template" class="d-none">
+  <option value="">Select product</option>
+  {% for p in products %}
+    <option value="{{ p.id }}" data-price="{{ p.unit_price }}">{{ p.code }} - {{ p.name }}</option>
+  {% endfor %}
+</select>
+
+<script>
+(function(){
+  const tbody = document.querySelector('#set-items-table tbody');
+  const hidden = document.getElementById('items_json');
+  const template = document.getElementById('product-template');
+  const setPrice = document.getElementById('id_unit_price');
+
+  function row(productId, qty){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><select class="form-select form-select-sm js-enhance-select product-select" data-placeholder="Select product">${template.innerHTML}</select></td>
+      <td><input type="number" min="1" value="${qty || 1}" class="form-control form-control-sm qty-input text-end"></td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger" aria-label="Remove">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+    const select = tr.querySelector('.product-select');
+    select.value = productId ? String(productId) : '';
+    tr.querySelector('button').addEventListener('click', function(){
+      tr.remove();
+      sync();
+    });
+    tr.querySelectorAll('select,input').forEach(el => el.addEventListener('change', sync));
+    tr.querySelector('.qty-input').addEventListener('input', sync);
+    if (window.initTomSelects) window.initTomSelects(tr);
+    sync();
+  }
+
+  function sync(){
+    const items = [];
+    let total = 0;
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const select = tr.querySelector('.product-select');
+      const productId = parseInt(select?.value || '0', 10);
+      const qty = parseInt(tr.querySelector('.qty-input')?.value || '0', 10);
+      const option = select?.selectedOptions?.[0];
+      const price = parseFloat(option?.dataset?.price || '0') || 0;
+      if (productId && qty > 0) {
+        items.push({product_id: productId, qty: qty});
+        total += price * qty;
+      }
+    });
+    hidden.value = JSON.stringify(items);
+    if (setPrice) setPrice.value = total.toFixed(2);
+  }
+
+  document.getElementById('btn-add-set-row')?.addEventListener('click', () => row('', 1));
+
+  let existing = [];
+  try { existing = JSON.parse(hidden.value || '[]'); } catch (_) { existing = []; }
+  if (existing.length) existing.forEach(item => row(item.product_id, item.qty));
+  else row('', 1);
+
+  document.getElementById('set-form')?.addEventListener('submit', sync);
+})();
+</script>
+{% endblock %}

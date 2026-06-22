@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}Complete Payment - Nuvana POS{% endblock %}
+{% block breadcrumb %}Subscription payment{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm" style="max-width: 620px;">
+  <div class="card-body">
+    <h1 class="h4 mb-2">Complete payment</h1>
+    <p class="text-muted mb-4">{{ plan.name }} for {{ tenant.name }}</p>
+    <div class="d-flex justify-content-between border-top border-bottom py-3 mb-4">
+      <span class="fw-semibold">Amount</span>
+      <span class="fw-bold">Rs. {{ plan.price|floatformat:2 }}</span>
+    </div>
+
+    <button id="rzp-button" class="btn btn-primary">
+      <i class="bi bi-credit-card me-1"></i>Pay with Razorpay
+    </button>
+    <a href="{% url 'subscription' %}" class="btn btn-light ms-2">Cancel</a>
+
+    <form id="rzp-form" method="post" action="{% url 'subscription_verify' %}" class="d-none">
+      {% csrf_token %}
+      <input type="hidden" name="razorpay_order_id" id="razorpay_order_id">
+      <input type="hidden" name="razorpay_payment_id" id="razorpay_payment_id">
+      <input type="hidden" name="razorpay_signature" id="razorpay_signature">
+    </form>
+  </div>
+</div>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+  (function () {
+    const options = {
+      key: "{{ razorpay_key_id }}",
+      amount: "{{ amount_paise }}",
+      currency: "INR",
+      name: "{{ tenant.name|escapejs }}",
+      description: "{{ plan.name|escapejs }}",
+      order_id: "{{ payment_order.razorpay_order_id }}",
+      prefill: {
+        name: "{{ tenant.owner_name|escapejs }}",
+        email: "{{ tenant.contact_email|escapejs }}",
+        contact: "{{ tenant.contact_phone|escapejs }}"
+      },
+      handler: function (response) {
+        document.getElementById("razorpay_order_id").value = response.razorpay_order_id || "";
+        document.getElementById("razorpay_payment_id").value = response.razorpay_payment_id || "";
+        document.getElementById("razorpay_signature").value = response.razorpay_signature || "";
+        document.getElementById("rzp-form").submit();
+      },
+      modal: {
+        ondismiss: function () {}
+      },
+      theme: {
+        color: "#0d6efd"
+      }
+    };
+
+    const rzp = new Razorpay(options);
+    document.getElementById("rzp-button").addEventListener("click", function (event) {
+      event.preventDefault();
+      rzp.open();
+    });
+    window.setTimeout(function () { rzp.open(); }, 300);
+  })();
+</script>
+{% endblock %}

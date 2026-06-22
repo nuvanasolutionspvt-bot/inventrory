@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Create Tenant Account{% endblock %}
+{% block breadcrumb %}Tenant registration{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-10">
+    <form method="post" class="card shadow-sm">
+      {% csrf_token %}
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div>
+          <h5 class="m-0">Create tenant account</h5>
+          <small class="text-muted">Register a business workspace and first owner admin.</small>
+        </div>
+        <a href="{% url 'login' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-box-arrow-in-right me-1"></i>Login
+        </a>
+      </div>
+
+      <div class="card-body">
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+          </div>
+        {% endif %}
+
+        <h6 class="text-muted mb-3">Business</h6>
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.business_name.id_for_label }}">Business name</label>
+            {{ form.business_name }}
+            {% for error in form.business_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.account_slug.id_for_label }}">Account ID</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-building"></i></span>
+              {{ form.account_slug }}
+            </div>
+            <div class="form-text">{{ form.account_slug.help_text }}</div>
+            {% for error in form.account_slug.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.business_type.id_for_label }}">Business type</label>
+            {{ form.business_type }}
+            {% for error in form.business_type.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.subscription_plan.id_for_label }}">Subscription</label>
+            {{ form.subscription_plan }}
+            {% for error in form.subscription_plan.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.contact_email.id_for_label }}">Business email</label>
+            {{ form.contact_email }}
+            {% for error in form.contact_email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.contact_phone.id_for_label }}">Business phone</label>
+            {{ form.contact_phone }}
+            {% for error in form.contact_phone.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ form.tax_id.id_for_label }}">GSTIN / Tax ID</label>
+            {{ form.tax_id }}
+            {% for error in form.tax_id.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <h6 class="text-muted mb-3">Owner admin</h6>
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.owner_name.id_for_label }}">Owner name</label>
+            {{ form.owner_name }}
+            {% for error in form.owner_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.username.id_for_label }}">Admin username</label>
+            {{ form.username }}
+            {% for error in form.username.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.password1.id_for_label }}">Password</label>
+            {{ form.password1 }}
+            {% for error in form.password1.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.password2.id_for_label }}">Confirm</label>
+            {{ form.password2 }}
+            {% for error in form.password2.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <h6 class="text-muted mb-3">Location</h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label class="form-label" for="{{ form.address.id_for_label }}">Business address</label>
+            {{ form.address }}
+            {% for error in form.address.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="{{ form.city.id_for_label }}">City</label>
+            {{ form.city }}
+            {% for error in form.city.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="{{ form.state.id_for_label }}">State</label>
+            {{ form.state }}
+            {% for error in form.state.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="{{ form.postal_code.id_for_label }}">PIN / Postal code</label>
+            {{ form.postal_code }}
+            {% for error in form.postal_code.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="{{ form.country.id_for_label }}">Country</label>
+            {{ form.country }}
+            {% for error in form.country.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              {{ form.accepted_terms }}
+              <label class="form-check-label" for="{{ form.accepted_terms.id_for_label }}">
+                {{ form.accepted_terms.label }}
+              </label>
+            </div>
+            {% for error in form.accepted_terms.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card-footer bg-white d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center">
+        <span class="text-muted small">The owner admin receives full POS permissions for this tenant.</span>
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-person-plus me-1"></i>Create tenant
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
