@@ -721,6 +721,7 @@ def product_list(request):
         'page_obj': page_obj,
         'page_size': page_size,
         'base_qs': base_qs,
+        'is_pharmacy': tenant.business_type == 'pharmacy',
     })
 
 
@@ -849,27 +850,35 @@ def _product_set_save(request, product_set=None):
 @login_required
 def product_export(request):
     tenant = _tenant(request)
+    is_pharmacy = tenant.business_type == 'pharmacy'
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="products.csv"'
     writer = csv.writer(response)
-    writer.writerow([
-        'code','barcode','name','batch_no','manufacture_date','expiry_date',
-        'category','unit_price','cost_price','tax_percent','reorder_level','is_active'
-    ])
+    headers = ['code', 'barcode', 'name']
+    if is_pharmacy:
+        headers.extend(['batch_no', 'manufacture_date', 'expiry_date'])
+    headers.extend(['category', 'unit_price', 'cost_price', 'tax_percent', 'reorder_level', 'is_active'])
+    writer.writerow(headers)
     for p in Product.objects.filter(tenant=tenant).select_related('category').order_by('code'):
-        writer.writerow([
-            p.code or '', p.barcode or '', p.name, p.batch_no or '',
-            p.manufacture_date.isoformat() if p.manufacture_date else '',
-            p.expiry_date.isoformat() if p.expiry_date else '',
+        row = [p.code or '', p.barcode or '', p.name]
+        if is_pharmacy:
+            row.extend([
+                p.batch_no or '',
+                p.manufacture_date.isoformat() if p.manufacture_date else '',
+                p.expiry_date.isoformat() if p.expiry_date else '',
+            ])
+        row.extend([
             (p.category.name if p.category else ''),
             p.unit_price, p.cost_price, p.tax_percent, p.reorder_level, int(p.is_active)
         ])
+        writer.writerow(row)
     return response
 
 
 @login_required
 def product_import(request):
     tenant = _tenant(request)
+    is_pharmacy = tenant.business_type == 'pharmacy'
     if request.method != 'POST' or 'file' not in request.FILES:
         messages.error(request, 'Upload a CSV file.')
         return redirect('product_list')
@@ -882,9 +891,14 @@ def product_import(request):
             continue
         barcode = (row.get('barcode') or '').strip() or None
         name = (row.get('name') or '').strip()
-        batch_no = (row.get('batch_no') or '').strip()
-        manufacture_date = date.fromisoformat((row.get('manufacture_date') or '').strip()) if (row.get('manufacture_date') or '').strip() else date.today()
-        expiry_date = date.fromisoformat((row.get('expiry_date') or '').strip()) if (row.get('expiry_date') or '').strip() else None
+        if is_pharmacy:
+            batch_no = (row.get('batch_no') or '').strip()
+            manufacture_date = date.fromisoformat((row.get('manufacture_date') or '').strip()) if (row.get('manufacture_date') or '').strip() else date.today()
+            expiry_date = date.fromisoformat((row.get('expiry_date') or '').strip()) if (row.get('expiry_date') or '').strip() else None
+        else:
+            batch_no = ''
+            manufacture_date = date.today()
+            expiry_date = None
         cat_name = (row.get('category') or '').strip() or None
         unit_price = Decimal(row.get('unit_price') or '0')
         cost_price = Decimal(row.get('cost_price') or '0')

@@ -70,9 +70,11 @@
             <th style="min-width:110px;">Code</th>
             <th style="min-width:120px;">Barcode</th>
             <th>Name</th>
+            {% if is_pharmacy %}
             <th style="min-width:120px;">Batch</th>
             <th style="min-width:130px;">Mfg Date</th>
             <th style="min-width:130px;">Expiry</th>
+            {% endif %}
             <th>Category</th>
             <th class="text-end" style="width:120px;">Unit Price</th>
             <th class="text-end" style="width:120px;">Cost</th>
@@ -106,6 +108,7 @@
                 <span class="badge rounded-pill text-bg-secondary">Inactive</span>
               {% endif %}
             </td>
+            {% if is_pharmacy %}
             <td class="font-monospace">{{ p.batch_no }}</td>
             <td>{{ p.manufacture_date|date:"Y-m-d" }}</td>
             <td>
@@ -115,6 +118,7 @@
                 <span class="text-muted">â€”</span>
               {% endif %}
             </td>
+            {% endif %}
             <td>{{ p.category }}</td>
             <td class="text-end">₹ {{ p.unit_price|floatformat:2 }}</td>
             <td class="text-end">₹ {{ p.cost_price|floatformat:2 }}</td>
@@ -143,7 +147,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="12" class="text-center py-5">
+            <td colspan="{% if is_pharmacy %}12{% else %}9{% endif %}" class="text-center py-5">
               <div class="text-muted mb-2"><i class="bi bi-inboxes"></i> No products found</div>
               <a href="{% url 'product_create' %}" class="btn btn-sm btn-success">
                 <i class="bi bi-plus-circle me-1"></i> Create your first product
@@ -177,7 +181,14 @@
             <input type="file" name="file" accept=".csv" class="form-control" required>
           </div>
           <div class="small text-muted">
-            <div class="mb-1"><strong>Columns:</strong> <code>code</code>, <code>barcode</code>, <code>name</code>, <code>category</code>, <code>unit_price</code>, <code>cost_price</code>, <code>tax_percent</code>, <code>reorder_level</code>, <code>is_active</code></div>
+            <div class="mb-1">
+              <strong>Columns:</strong>
+              {% if is_pharmacy %}
+                <code>code</code>, <code>barcode</code>, <code>name</code>, <code>batch_no</code>, <code>manufacture_date</code>, <code>expiry_date</code>, <code>category</code>, <code>unit_price</code>, <code>cost_price</code>, <code>tax_percent</code>, <code>reorder_level</code>, <code>is_active</code>
+              {% else %}
+                <code>code</code>, <code>barcode</code>, <code>name</code>, <code>category</code>, <code>unit_price</code>, <code>cost_price</code>, <code>tax_percent</code>, <code>reorder_level</code>, <code>is_active</code>
+              {% endif %}
+            </div>
             <div>Tip: Export once via <b>Export CSV</b> to get the exact header and formats.</div>
           </div>
         </div>
@@ -231,11 +242,15 @@
   const sampleBtn = document.getElementById('btnDownloadSample');
   if (sampleBtn) {
     sampleBtn.addEventListener('click', function(){
-      const rows = [
+      const rows = {% if is_pharmacy %}[
         ["code","barcode","name","batch_no","manufacture_date","expiry_date","category","unit_price","cost_price","tax_percent","reorder_level","is_active"],
-        ["PEN-001","8901234567890","Ball Pen Blue","BATCH-01","2026-05-08","2028-05-08","Pens","10.00","6.00","12.00","20","1"],
-        ["NOTE-A5","","Notebook A5 Ruled","BATCH-02","2026-05-08","","Notebooks","60.00","40.00","12.00","15","1"]
-      ];
+        ["MED-001","8901234567890","Paracetamol 500mg","BATCH-01","2026-05-08","2028-05-08","Tablets","10.00","6.00","12.00","20","1"],
+        ["SYP-001","","Cough Syrup","BATCH-02","2026-05-08","2028-05-08","Syrups","60.00","40.00","12.00","15","1"]
+      ]{% else %}[
+        ["code","barcode","name","category","unit_price","cost_price","tax_percent","reorder_level","is_active"],
+        ["PEN-001","8901234567890","Ball Pen Blue","Pens","10.00","6.00","12.00","20","1"],
+        ["NOTE-A5","","Notebook A5 Ruled","Notebooks","60.00","40.00","12.00","15","1"]
+      ]{% endif %};
       const csv = rows.map(r => r.map(cell => {
         const s = String(cell ?? "");
         return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;

@@ -442,6 +442,8 @@ class RolePermissionForm(forms.Form):
 # ---------------------------
 
 class ProductForm(TenantModelFormMixin, forms.ModelForm):
+    PHARMACY_FIELDS = ('batch_no', 'manufacture_date', 'expiry_date')
+
     class Meta:
         model = Product
         fields = [
@@ -473,6 +475,23 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
             self.fields['category'].queryset = Category.objects.filter(tenant=self.tenant).order_by('name')
         else:
             self.fields['category'].queryset = Category.objects.none()
+        if not self.is_pharmacy_tenant:
+            for field_name in self.PHARMACY_FIELDS:
+                self.fields.pop(field_name, None)
+
+    @property
+    def is_pharmacy_tenant(self):
+        return bool(self.tenant and self.tenant.business_type == 'pharmacy')
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        if not self.is_pharmacy_tenant:
+            obj.batch_no = ''
+            obj.expiry_date = None
+        if commit:
+            obj.save()
+            self.save_m2m()
+        return obj
 
     def clean_code(self):
         code = self.cleaned_data['code'].strip()
