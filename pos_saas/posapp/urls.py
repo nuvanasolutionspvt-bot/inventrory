@@ -4,6 +4,10 @@ from . import views
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('register/', views.register, name='register'),
+    path('company/', views.company_dashboard, name='company_dashboard'),
+    path('company/businesses/', views.company_business_list, name='company_business_list'),
+    path('company/businesses/new/', views.company_business_create, name='company_business_create'),
+    path('company/businesses/<int:tenant_id>/edit/', views.company_business_edit, name='company_business_edit'),
     path('subscription/', views.subscription, name='subscription'),
     path('subscription/trial/', views.subscription_trial, name='subscription_trial'),
     path('subscription/checkout/<str:plan_code>/', views.subscription_checkout, name='subscription_checkout'),
@@ -59,6 +63,7 @@ urlpatterns = [
     path('settings/', views.settings_general, name='settings_general'),
 
     path('credit/receive/', views.receive_payment, name='receive_payment'),
+    path('credit/receipt/<int:ledger_id>/', views.payment_receipt, name='payment_receipt'),
     path('credit/charge/', views.customer_charge, name='customer_charge'),
     path('credit/statement/', views.customer_statement, name='customer_statement'),
     path('settings/', views.settings_general, name='settings_general'),

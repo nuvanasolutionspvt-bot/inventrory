@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from django.contrib import messages
 from django.contrib.auth import login
-from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -26,14 +26,14 @@ from .forms import (
     ProductForm, SiteSettingForm, SupplierForm, CustomerForm,
     PurchaseForm, SaleForm, StockAdjustForm, ProductSetForm,
     UserCreateForm, UserEditForm, RoleForm, RolePermissionForm,
-    TenantRegistrationForm,
+    TenantRegistrationForm, CompanyBusinessCreateForm, CompanyBusinessEditForm,
     # NEW credit forms
     ReceivePaymentForm, CustomerChargeForm, CustomerStatementFilterForm,
 )
 from .models import (
     Product, ProductSet, ProductSetItem, SiteSetting, Supplier, Customer, Purchase, PurchaseItem,
     Sale, SaleItem, StockMove, Category, CustomerLedger, TenantMembership,
-    SubscriptionPlan, TenantSubscription, SubscriptionPaymentOrder
+    SubscriptionPlan, TenantSubscription, SubscriptionPaymentOrder, Tenant
 )
 from .tenancy import SESSION_TENANT_KEY, require_active_tenant
 import csv, io, json
@@ -132,6 +132,31 @@ def _valid_razorpay_signature(order_id, payment_id, signature):
     return hmac.compare_digest(expected, signature or '')
 
 
+def _company_admin_required(user):
+    return user.is_authenticated and user.is_staff
+
+
+def _business_rows():
+    subscriptions = {}
+    rows = []
+    seen = set()
+    for sub in (
+        TenantSubscription.objects
+        .filter(status='active')
+        .select_related('plan')
+        .order_by('tenant_id', '-ends_at')
+    ):
+        if sub.tenant_id not in seen:
+            subscriptions[sub.tenant_id] = sub
+            seen.add(sub.tenant_id)
+    for tenant in Tenant.objects.order_by('-created_at'):
+        rows.append({
+            'tenant': tenant,
+            'subscription': subscriptions.get(tenant.id),
+        })
+    return rows
+
+
 def _send_sms_if_enabled(customer: Customer, message: str):
     """Lightweight SMS hook. Replace with real gateway call if needed."""
     s = SiteSetting.get(customer.tenant)
@@ -144,50 +169,13 @@ def _send_sms_if_enabled(customer: Customer, message: str):
 
 
 def _enforce_credit_or_block(customer: Customer, will_add_debit: Decimal):
-    """
-    Returns None if allowed, else a human-readable error string.
-    - customer.balance = debits - credits
-    - will_add_debit is the additional debit we’re about to post (>= 0)
-    """
-    if not customer or will_add_debit <= 0:
-        return None
-    s = SiteSetting.get(customer.tenant)
-    if not s.credit_enforce:
-        return None
-
-    cur = customer.balance or Decimal('0.00')
-    limit = customer.credit_limit or Decimal('0.00')
-    if limit <= 0:
-        return "Customer has no credit limit."
-
-    new_bal = cur + will_add_debit
-    if new_bal > limit:
-        over = new_bal - limit
-        return (
-            f"Sale blocked: credit limit exceeded. "
-            f"Limit ₹{limit:.2f}, current ₹{cur:.2f}, new balance ₹{new_bal:.2f} (over by ₹{over:.2f})."
-        )
+    """Customer credit is unlimited, so credit sales are always allowed."""
     return None
 
 
 def _maybe_credit_alert(customer: Customer, added_debit: Decimal):
-    """Show a warning (and optionally SMS) when balance crosses threshold% of limit."""
-    if not customer or added_debit <= 0:
-        return
-    s = SiteSetting.get(customer.tenant)
-    limit = customer.credit_limit or Decimal('0.00')
-    if limit <= 0:
-        return
-    cur = customer.balance or Decimal('0.00')
-    after = cur + added_debit
-    pct = (after / limit * 100) if limit > 0 else 0
-    if pct >= (s.credit_alert_threshold or Decimal('80')):
-        msg = (
-            f"Credit alert for {customer.name}: "
-            f"₹{after:.2f} / ₹{limit:.2f} ({pct:.0f}%)."
-        )
-        # UI warning (caller typically adds a messages.warning)
-        _send_sms_if_enabled(customer, msg)
+    """Limit-based alerts are disabled because customer credit is unlimited."""
+    return
 
 
 def _product_stock_map(tenant, product_ids=None):
@@ -409,6 +397,70 @@ def register(request):
     return render(request, 'auth/register.html', {'form': form})
 
 
+@user_passes_test(_company_admin_required, login_url='company_login')
+def company_dashboard(request):
+    rows = _business_rows()
+    active_count = sum(1 for row in rows if row['tenant'].is_active)
+    expired_count = sum(
+        1 for row in rows
+        if row['subscription'] and row['subscription'].ends_at < timezone.now()
+    )
+    return render(request, 'company/dashboard.html', {
+        'total_businesses': Tenant.objects.count(),
+        'active_businesses': active_count,
+        'expired_businesses': expired_count,
+        'recent_rows': rows[:5],
+    })
+
+
+@user_passes_test(_company_admin_required, login_url='company_login')
+def company_business_list(request):
+    rows = _business_rows()
+    return render(request, 'company/business_list.html', {'rows': rows})
+
+
+@user_passes_test(_company_admin_required, login_url='company_login')
+def company_business_create(request):
+    if request.method == 'POST':
+        form = CompanyBusinessCreateForm(request.POST)
+        if form.is_valid():
+            tenant, user = form.save()
+            messages.success(request, f"Business '{tenant.name}' registered for {tenant.owner_name}.")
+            return redirect('company_business_list')
+    else:
+        form = CompanyBusinessCreateForm()
+    return render(request, 'company/business_form.html', {
+        'form': form,
+        'title': 'Register Business',
+        'business': None,
+    })
+
+
+@user_passes_test(_company_admin_required, login_url='company_login')
+def company_business_edit(request, tenant_id):
+    tenant = get_object_or_404(Tenant, pk=tenant_id)
+    subscription = (
+        TenantSubscription.objects
+        .filter(tenant=tenant, status='active')
+        .select_related('plan')
+        .order_by('-ends_at')
+        .first()
+    )
+    if request.method == 'POST':
+        form = CompanyBusinessEditForm(request.POST, instance=tenant, subscription=subscription)
+        if form.is_valid():
+            business = form.save()
+            messages.success(request, f"Business '{business.name}' updated.")
+            return redirect('company_business_list')
+    else:
+        form = CompanyBusinessEditForm(instance=tenant, subscription=subscription)
+    return render(request, 'company/business_form.html', {
+        'form': form,
+        'title': 'Edit Business',
+        'business': tenant,
+    })
+
+
 @login_required
 def subscription(request):
     tenant = _tenant(request)
@@ -588,8 +640,6 @@ def dashboard(request):
     )
 
     # ===== Credit overview =====
-    s = SiteSetting.get(tenant)
-    threshold = s.credit_alert_threshold or Decimal('80')
     # Note: DO NOT annotate a field named "balance" (conflicts with @property). Use "bal".
     customers_balanced = (
         Customer.objects.filter(tenant=tenant)
@@ -611,57 +661,17 @@ def dashboard(request):
         .aggregate(t=Coalesce(Sum('bal'), Value(Decimal('0.00'))))['t']
     )
 
-    # Nearing threshold: balance/limit >= threshold% (only where limit > 0 and bal > 0)
-    nearing_threshold_count = (
-        customers_balanced
-        .filter(credit_limit__gt=0, bal__gt=0)
-        .annotate(
-            usage_pct=ExpressionWrapper(
-                (F('bal') * Value(100.0)) / F('credit_limit'),
-                output_field=DecimalField(max_digits=7, decimal_places=2)
-            )
-        )
-        .filter(usage_pct__gte=threshold)
-        .count()
-    )
-
-    # Over limit list (top 10 by excess)
-    over_limit_list = (
-        customers_balanced
-        .filter(credit_limit__gt=0, bal__gt=F('credit_limit'))
-        .annotate(
-            excess=ExpressionWrapper(
-                F('bal') - F('credit_limit'),
-                output_field=DecimalField(max_digits=14, decimal_places=2)
-            )
-        )
-        .values('id', 'name', 'bal', 'credit_limit', 'excess')
-        .order_by('-excess')[:10]
-    )
-
-    # Top debtors (balances > 0) with usage % for table
+    # Top debtors (balances > 0)
     top_debtors = (
         customers_balanced
-        .annotate(
-            usage_pct=Case(
-                When(credit_limit__gt=0,
-                     then=ExpressionWrapper(
-                         (F('bal') * Value(100.0)) / F('credit_limit'),
-                         output_field=DecimalField(max_digits=7, decimal_places=2)
-                     )),
-                default=Value(0),
-                output_field=DecimalField(max_digits=7, decimal_places=2)
-            )
-        )
         .filter(bal__gt=0)
-        .values('id', 'name', 'bal', 'credit_limit', 'usage_pct')
+        .values('id', 'name', 'bal')
         .order_by('-bal')[:10]
     )
 
     credit_kpis = {
         'total_outstanding': total_outstanding or Decimal('0.00'),
-        'nearing_threshold': nearing_threshold_count,
-        'customers_over_limit': len(over_limit_list),
+        'customers_with_balance': customers_balanced.filter(bal__gt=0).count(),
     }
 
     return render(request, 'dashboard.html', {
@@ -674,9 +684,7 @@ def dashboard(request):
         'top_customers': top_customers,
         # Credit
         'credit_kpis': credit_kpis,
-        'credit_threshold': threshold,       # used for label "≥ {{ credit_threshold }}%"
         'top_debtors': top_debtors,
-        'over_limit_list': over_limit_list,
     })
 
 # --------------------------
@@ -982,7 +990,7 @@ def _subset_form(form: CustomerForm, preferred_fields=None):
     Restrict the form to a smaller subset for the quick modal,
     while preserving original widgets/validators.
     """
-    preferred_fields = preferred_fields or ['name', 'phone', 'email', 'credit_limit', 'address']
+    preferred_fields = preferred_fields or ['name', 'phone', 'email', 'address']
     keep = [f for f in preferred_fields if f in form.fields]
     form.fields = {k: form.fields[k] for k in keep}
     return form
@@ -1182,7 +1190,7 @@ def pos_sale_create(request):
             sale.tax = tax_total
             sale.total = (subtotal - sale.discount) + tax_total
 
-            # --- CREDIT ENFORCEMENT ---
+            # --- CREDIT LEDGER ---
             will_add_debit = Decimal('0.00')
             if not sale.is_return and sale.customer:
                 due_if_sale = sale.total - (sale.paid_amount or Decimal('0'))
@@ -1292,6 +1300,28 @@ def sales_report(request):
         qs = qs.filter(date__lte=end)
     total = qs.aggregate(s=Sum('total'))['s'] or Decimal('0.00')
     by_day = qs.values('date').annotate(total=Sum('total')).order_by('date')
+
+    if request.GET.get('format') == 'pdf':
+        rows = [
+            [
+                str(s.date),
+                f"{'CRN' if s.is_return else 'INV'}-{s.id}",
+                s.customer.name if s.customer else '',
+                f"{s.subtotal:.2f}",
+                f"{s.tax:.2f}",
+                f"{s.total:.2f}",
+            ]
+            for s in qs.order_by('date', 'id')
+        ]
+        title = 'Sales Report' + (f" ({start} to {end})" if start or end else '')
+        return _report_pdf_response(
+            title,
+            ['Date', 'Inv/CRN', 'Customer', 'Subtotal', 'Tax', 'Total'],
+            rows,
+            footer_lines=[f"Total: {total:.2f}"],
+            col_widths=[25*mm, 28*mm, 55*mm, 28*mm, 24*mm, 30*mm],
+        )
+
     return render(request, 'reports/sales.html', {'sales': qs.order_by('-date','-id')[:200], 'total': total, 'by_day': by_day, 'start': start, 'end': end})
 
 
@@ -1346,7 +1376,7 @@ def stock_report(request):
 
 # -------- Purchases report (same) --------
 
-def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=None):
+def _legacy_report_pdf_response(title, headers, rows, footer_lines=None, col_widths=None):
     resp = HttpResponse(content_type='application/pdf')
     safe_title = title.lower().replace(' ', '_')
     resp['Content-Disposition'] = f'attachment; filename="{safe_title}.pdf"'
@@ -1409,6 +1439,117 @@ def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=Non
 
     c.showPage()
     c.save()
+    return resp
+
+
+def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=None):
+    from xml.sax.saxutils import escape
+    import re
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    resp = HttpResponse(content_type='application/pdf')
+    safe_title = re.sub(r'[^a-z0-9_-]+', '_', title.lower()).strip('_') or 'report'
+    resp['Content-Disposition'] = f'attachment; filename="{safe_title}.pdf"'
+
+    ncols = len(headers)
+    if not col_widths:
+        page_w, _ = A4
+        total_w = page_w - 24*mm
+        col_widths = [total_w / ncols] * ncols
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'ReportTitle',
+        parent=styles['Title'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        leading=18,
+        alignment=TA_LEFT,
+        spaceAfter=8,
+    )
+    header_style = ParagraphStyle(
+        'ReportHeader',
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10,
+        textColor=colors.white,
+        alignment=TA_LEFT,
+    )
+    cell_style = ParagraphStyle(
+        'ReportCell',
+        fontName='Helvetica',
+        fontSize=8,
+        leading=10,
+        alignment=TA_LEFT,
+    )
+    numeric_style = ParagraphStyle(
+        'ReportCellRight',
+        parent=cell_style,
+        alignment=TA_RIGHT,
+    )
+    footer_style = ParagraphStyle(
+        'ReportFooter',
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=12,
+        alignment=TA_RIGHT,
+    )
+
+    def clean_text(value):
+        text = '' if value is None else str(value)
+        return text.replace('â‚¹', 'Rs.').replace('₹', 'Rs.')
+
+    def is_numeric(value):
+        text = clean_text(value).strip().replace(',', '')
+        text = re.sub(r'^(rs\.?|inr)\s*', '', text, flags=re.I)
+        return bool(re.match(r'^-?\d+(?:\.\d+)?$', text))
+
+    def para(value, style):
+        text = escape(clean_text(value)).replace('\n', '<br/>')
+        return Paragraph(text, style)
+
+    table_data = [[para(header, header_style) for header in headers]]
+    for row in rows:
+        row_values = list(row)[:ncols]
+        row_values += [''] * (ncols - len(row_values))
+        table_data.append([
+            para(value, numeric_style if is_numeric(value) else cell_style)
+            for value in row_values
+        ])
+
+    doc = SimpleDocTemplate(
+        resp,
+        pagesize=A4,
+        leftMargin=12*mm,
+        rightMargin=12*mm,
+        topMargin=12*mm,
+        bottomMargin=12*mm,
+        title=title,
+    )
+    table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign='LEFT')
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#334155')),
+        ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#94a3b8')),
+        ('BOX', (0, 0), (-1, -1), 0.7, colors.HexColor('#475569')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+    ]))
+
+    story = [Paragraph(escape(clean_text(title)), title_style), table]
+    if footer_lines:
+        story.append(Spacer(1, 6*mm))
+        for line in footer_lines:
+            story.append(Paragraph(escape(clean_text(line)), footer_style))
+
+    doc.build(story)
     return resp
 
 
@@ -1517,7 +1658,7 @@ def sale_update(request, sale_id):
             sale.tax = tax_total
             sale.total = (subtotal - sale.discount) + tax_total
 
-            # (Optional) credit enforcement on edit if changing totals upward
+            # Credit ledger adjustment on edit if changing totals upward
             will_add_debit = Decimal('0.00')
             if not sale.is_return and sale.customer:
                 due_if_sale = sale.total - (sale.paid_amount or Decimal('0'))
@@ -1673,7 +1814,7 @@ def customer_balance_api(request, customer_id):
     c = get_object_or_404(Customer, tenant=_tenant(request), pk=customer_id)
     return JsonResponse({
         'balance': str(c.balance or 0),
-        'credit_limit': str(c.credit_limit or 0),
+        'unlimited_credit': True,
         'phone': c.phone or '',
         'sms_opt_in': bool(c.sms_opt_in),
         'call_opt_in': bool(c.call_opt_in),
@@ -1707,21 +1848,44 @@ def receive_payment(request):
     tenant = _tenant(request)
     if request.method == 'POST':
         form = ReceivePaymentForm(request.POST, tenant=tenant)
-        print("recieved",form.errors)
         if form.is_valid():
             c = form.cleaned_data['customer']
             amt = form.cleaned_data['amount']
             dt  = form.cleaned_data['date']
             ref = form.cleaned_data.get('reference') or ''
-            CustomerLedger.objects.create(
+            payment = CustomerLedger.objects.create(
                 tenant=tenant,
                 customer=c, date=dt, description=f"Payment {ref}".strip(), debit=0, credit=amt
             )
             messages.success(request, f"Payment ₹{amt:.2f} recorded for {c.name}. New balance ₹{c.balance:.2f}.")
-            return redirect('receive_payment')
+            return redirect('payment_receipt', ledger_id=payment.id)
     else:
         form = ReceivePaymentForm(initial={'date': date.today()}, tenant=tenant)
     return render(request, 'credit/receive_payment.html', {'form': form, 'title': 'Receive Payment'})
+
+
+@login_required
+@permission_required('posapp.can_credit_receive', raise_exception=True)
+def payment_receipt(request, ledger_id):
+    tenant = _tenant(request)
+    payment = get_object_or_404(
+        CustomerLedger.objects.select_related('customer'),
+        tenant=tenant,
+        pk=ledger_id,
+        credit__gt=0,
+        sale__isnull=True,
+    )
+    s = SiteSetting.get(tenant)
+    return render(request, 'credit/payment_receipt.html', {
+        'payment': payment,
+        'org_name': s.org_name,
+        'org_address': s.org_address,
+        'org_phone': s.org_phone,
+        'org_email': s.org_email,
+        'bill_footer': s.bill_footer,
+        'printer_type': s.printer_type,
+        'balance': payment.customer.balance,
+    })
 
 
 

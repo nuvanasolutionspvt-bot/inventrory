@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Payment Receipt #PAY-{{ payment.id }} - Stationery POS{% endblock %}
+{% block breadcrumb %}Credit / Payment Receipt{% endblock %}
+
+{% block content %}
+<div class="d-print-none mb-3 d-flex justify-content-between align-items-center">
+  <a href="{% url 'receive_payment' %}" class="btn btn-light"><i class="bi bi-arrow-left"></i> Receive Payment</a>
+  <div class="d-flex gap-2">
+    <a href="{% url 'customer_statement' %}?customer={{ payment.customer_id }}" class="btn btn-outline-secondary">
+      <i class="bi bi-file-text"></i> Statement
+    </a>
+    <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+  </div>
+</div>
+
+<div class="receipt-wrapper receipt-{{ printer_type|default:'a4' }}">
+  <div class="receipt-header">
+    <img src="{% static 'logo.png' %}" alt="Logo" class="logo" onerror="this.style.display='none'">
+    <h2 class="org-name">{{ org_name|default:"Your Store" }}</h2>
+    <div class="org-info">
+      {{ org_address|default:"" }}{% if org_address %}<br>{% endif %}
+      {% if org_phone %}Ph: {{ org_phone }}{% endif %}{% if org_email %}{% if org_phone %} | {% endif %}{{ org_email }}{% endif %}
+    </div>
+  </div>
+
+  <div class="receipt-title">Payment Receipt</div>
+
+  <table class="info-table">
+    <tr>
+      <td class="label-cell">Receipt No.</td>
+      <td class="value-cell">PAY-{{ payment.id }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Date</td>
+      <td class="value-cell">{{ payment.date }}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Customer</td>
+      <td class="value-cell">
+        <strong>{{ payment.customer.name }}</strong>
+        {% if payment.customer.phone %}<br>Ph: {{ payment.customer.phone }}{% endif %}
+        {% if payment.customer.email %}<br>Email: {{ payment.customer.email }}{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  <table class="amount-table">
+    <tr>
+      <td>Amount Received</td>
+      <td class="text-right amount">Rs. {{ payment.credit|floatformat:2 }}</td>
+    </tr>
+    {% if payment.description %}
+    <tr>
+      <td>Reference</td>
+      <td class="text-right">{{ payment.description }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td>Balance After Payment</td>
+      <td class="text-right">Rs. {{ balance|floatformat:2 }}</td>
+    </tr>
+  </table>
+
+  <div class="signature-row">
+    <div>Customer Signature</div>
+    <div>Authorized Signature</div>
+  </div>
+
+  <div class="receipt-footer">
+    <p>Thank you. Keep this receipt for your records.</p>
+    {% if bill_footer %}<p>{{ bill_footer }}</p>{% endif %}
+  </div>
+</div>
+
+<style>
+:root {
+  --paper-width: 190mm;
+  --paper-padding: 14mm;
+  --font-size: 12px;
+}
+
+{% if printer_type == 'thermal_80' %}
+:root { --paper-width: 80mm; --paper-padding: 8px; --font-size: 11px; }
+{% elif printer_type == 'thermal_58' %}
+:root { --paper-width: 58mm; --paper-padding: 4px; --font-size: 11px; }
+{% endif %}
+
+.receipt-wrapper {
+  width: var(--paper-width);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: var(--paper-padding);
+  background: #fff;
+  color: #111;
+  font-size: var(--font-size);
+  border: 1px solid #ddd;
+  font-family: Arial, sans-serif;
+}
+.receipt-header { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 12px; }
+.logo { max-height: 50px; max-width: 120px; object-fit: contain; margin-bottom: 6px; }
+.org-name { margin: 0; font-size: 22px; font-weight: 700; }
+.org-info { font-size: 12px; color: #444; }
+.receipt-title { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; margin: 12px 0; }
+.info-table, .amount-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+.info-table td, .amount-table td { border: 1px solid #333; padding: 8px; vertical-align: top; }
+.label-cell { width: 35%; background: #f5f5f5; font-weight: 700; }
+.value-cell { text-align: right; }
+.text-right { text-align: right; }
+.amount { font-size: 18px; font-weight: 700; }
+.signature-row { display: flex; justify-content: space-between; gap: 20px; margin-top: 36px; }
+.signature-row div { width: 45%; border-top: 1px solid #333; padding-top: 6px; text-align: center; }
+.receipt-footer { text-align: center; margin-top: 18px; font-size: 11px; color: #444; }
+
+.receipt-thermal_58 .org-name,
+.receipt-thermal_80 .org-name { font-size: 16px; }
+.receipt-thermal_58 .receipt-title,
+.receipt-thermal_80 .receipt-title { font-size: 14px; }
+.receipt-thermal_58 .info-table td,
+.receipt-thermal_58 .amount-table td,
+.receipt-thermal_80 .info-table td,
+.receipt-thermal_80 .amount-table td { padding: 4px; }
+.receipt-thermal_58 .signature-row,
+.receipt-thermal_80 .signature-row { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  .receipt-wrapper, .receipt-wrapper * { visibility: visible; }
+  .receipt-wrapper {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border: 0;
+    margin: 0;
+    max-width: none;
+  }
+  .d-print-none { display: none !important; }
+  @page { margin: 8mm; }
+}
+</style>
+{% endblock %}

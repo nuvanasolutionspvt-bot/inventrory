@@ -1,0 +1,45 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nuvana Admin</title>
+    <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}?v=offline2" rel="stylesheet">
+    <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.css' %}?v=offline2" rel="stylesheet">
+    <style>
+      body { min-height: 100vh; display: grid; place-items: center; background: #f6f7fb; }
+      .login-card { width: min(440px, calc(100vw - 32px)); border: 1px solid #e5e7eb; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <form method="post" class="card login-card shadow-sm">
+      {% csrf_token %}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <div class="card-body p-4">
+        <div class="text-center mb-4">
+          <img src="{% static 'brand/nuvana-dark.png' %}" alt="Nuvana Solutions" style="max-width: 190px; height: auto;">
+          <div class="text-muted">Admin access for business management</div>
+        </div>
+        {% if form.errors %}
+          <div class="alert alert-danger">Invalid username or password.</div>
+        {% endif %}
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+            <input type="text" name="username" class="form-control" required autocomplete="username">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+            <input type="password" name="password" class="form-control" required autocomplete="current-password">
+          </div>
+        </div>
+        <button class="btn btn-primary w-100">Login</button>
+      </div>
+    </form>
+  </body>
+</html>

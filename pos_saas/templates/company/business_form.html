@@ -1,0 +1,130 @@
+{% extends 'company/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if business %}Update account and expiry{% else %}Create a customer business account{% endif %}{% endblock %}
+
+{% block content %}
+<form method="post" class="card shadow-sm">
+  {% csrf_token %}
+  <div class="card-body">
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <h6 class="text-muted mb-3">Business</h6>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <label class="form-label">{% if form.business_name %}Business name{% else %}Business name{% endif %}</label>
+        {% if form.business_name %}{{ form.business_name }}{% else %}{{ form.name }}{% endif %}
+        {% for error in form.business_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      {% if form.account_slug %}
+      <div class="col-md-6">
+        <label class="form-label">Account ID</label>
+        {{ form.account_slug }}
+        {% for error in form.account_slug.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      {% endif %}
+      <div class="col-md-4">
+        <label class="form-label">Business type</label>
+        {{ form.business_type }}
+        {% for error in form.business_type.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Subscription</label>
+        {{ form.subscription_plan }}
+        {% for error in form.subscription_plan.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Expiry date</label>
+        {{ form.subscription_expiry }}
+        {% for error in form.subscription_expiry.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        <div class="form-text">Set custom expiry, for example one month access.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Owner name</label>
+        {{ form.owner_name }}
+        {% for error in form.owner_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Business email</label>
+        {{ form.contact_email }}
+        {% for error in form.contact_email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Business phone</label>
+        {{ form.contact_phone }}
+        {% for error in form.contact_phone.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">GSTIN / Tax ID</label>
+        {{ form.tax_id }}
+        {% for error in form.tax_id.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+    </div>
+
+    {% if form.username %}
+    <h6 class="text-muted mb-3">Owner Login</h6>
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <label class="form-label">Admin username</label>
+        {{ form.username }}
+        {% for error in form.username.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Password</label>
+        {{ form.password1 }}
+        {% for error in form.password1.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Confirm password</label>
+        {{ form.password2 }}
+        {% for error in form.password2.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <h6 class="text-muted mb-3">Location</h6>
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="form-label">Address</label>
+        {{ form.address }}
+        {% for error in form.address.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">City</label>
+        {{ form.city }}
+        {% for error in form.city.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">State</label>
+        {{ form.state }}
+        {% for error in form.state.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">PIN / Postal code</label>
+        {{ form.postal_code }}
+        {% for error in form.postal_code.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Country</label>
+        {{ form.country }}
+        {% for error in form.country.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      {% if form.is_active %}
+      <div class="col-12">
+        <div class="form-check">
+          {{ form.is_active }}
+          <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active business</label>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex justify-content-between">
+    <a href="{% url 'company_business_list' %}" class="btn btn-light">Cancel</a>
+    <button class="btn btn-primary"><i class="bi bi-save2 me-1"></i>Save</button>
+  </div>
+</form>
+{% endblock %}

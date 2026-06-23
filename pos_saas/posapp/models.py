@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.conf import settings as dj_settings
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.validators import MinValueValidator
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 from decimal import Decimal
@@ -285,7 +285,6 @@ class Customer(TimeStampedModel):
     email = models.EmailField(blank=True)
 
     # --- Credit profile ---
-    credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     sms_opt_in   = models.BooleanField(default=True)
     call_opt_in  = models.BooleanField(default=False)
 
@@ -312,29 +311,15 @@ class Customer(TimeStampedModel):
 
     @property
     def available_credit(self) -> Decimal:
-        """How much room remains under the limit (can be negative if exceeded)."""
-        return (Decimal(self.credit_limit or 0) - self.balance).quantize(TWO_DEC)
+        """Credit is unlimited; this remains for compatibility with old callers."""
+        return Decimal('0.00')
 
     @property
     def is_over_limit(self) -> bool:
-        return self.balance > (self.credit_limit or Decimal('0.00'))
+        return False
 
     def threshold_reached(self) -> bool:
-        """
-        Uses SiteSetting.credit_alert_threshold as a PERCENT of limit.
-        e.g., 80 means alert at (balance >= 80% of credit_limit).
-        If limit is 0, never trigger based on percent.
-        """
-        try:
-            s = SiteSetting.get(self.tenant)
-        except Exception:
-            return False
-        lim = Decimal(self.credit_limit or 0)
-        if lim <= 0:
-            return False
-        pct = Decimal(s.credit_alert_threshold or 0)  # 0-100
-        threshold_amt = (lim * pct / Decimal('100')).quantize(TWO_DEC)
-        return self.balance >= threshold_amt
+        return False
 
 
 # -------------------------------------------------------------------
@@ -509,13 +494,6 @@ class SiteSetting(models.Model):
     bill_footer = models.CharField(max_length=200, blank=True, default='')
     bill_tax_inclusive = models.BooleanField(default=True)
     printer_type = models.CharField(max_length=20, choices=PRINTER_TYPE_CHOICES, default='a4')
-
-    # Credit rules
-    credit_enforce = models.BooleanField(default=False)  # block if exceeds limit
-    credit_alert_threshold = models.DecimalField(        # PERCENT of limit (0-100)
-        max_digits=5, decimal_places=2, default=Decimal('80.00'),
-        validators=[MinValueValidator(0), MaxValueValidator(100)]
-    )
 
     # SMS
     sms_enabled  = models.BooleanField(default=False)

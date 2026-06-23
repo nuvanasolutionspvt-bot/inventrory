@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from django import forms
 from django.contrib.auth.models import User, Group, Permission
@@ -259,6 +259,123 @@ class TenantRegistrationForm(forms.Form):
                 status='active',
             )
         return tenant, user
+
+
+class CompanyBusinessCreateForm(TenantRegistrationForm):
+    accepted_terms = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.HiddenInput(),
+    )
+    subscription_expiry = forms.DateField(
+        required=False,
+        label="Expiry date",
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        help_text="Optional. Use this to give custom access, for example one month for friends.",
+    )
+
+    @transaction.atomic
+    def save(self):
+        tenant, user = super().save()
+        expiry = self.cleaned_data.get('subscription_expiry')
+        plan = SubscriptionPlan.objects.filter(code=self.cleaned_data['subscription_plan'], is_active=True).first()
+        if plan and expiry:
+            subscription = (
+                TenantSubscription.objects
+                .filter(tenant=tenant, plan=plan, status='active')
+                .order_by('-ends_at')
+                .first()
+            )
+            ends_at = timezone.make_aware(datetime.combine(expiry, time.min), timezone.get_current_timezone())
+            if subscription:
+                subscription.ends_at = ends_at
+                subscription.save(update_fields=['ends_at', 'updated_at'])
+            else:
+                TenantSubscription.objects.create(
+                    tenant=tenant,
+                    plan=plan,
+                    starts_at=timezone.now(),
+                    ends_at=ends_at,
+                    status='active',
+                )
+        return tenant, user
+
+
+class CompanyBusinessEditForm(forms.ModelForm):
+    subscription_plan = forms.ChoiceField(
+        choices=(
+            ('trial', 'Free Trial - 7 days'),
+            ('monthly', 'Monthly - Rs. 299'),
+            ('yearly', 'Yearly - Rs. 3500'),
+        ),
+        label="Subscription plan",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    subscription_expiry = forms.DateField(
+        required=False,
+        label="Expiry date",
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+    )
+
+    class Meta:
+        model = Tenant
+        fields = [
+            'name', 'business_type', 'owner_name', 'contact_email', 'contact_phone',
+            'address', 'city', 'state', 'postal_code', 'country', 'tax_id', 'is_active',
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={"class": "form-control"}),
+            'business_type': forms.Select(attrs={"class": "form-select"}),
+            'owner_name': forms.TextInput(attrs={"class": "form-control"}),
+            'contact_email': forms.EmailInput(attrs={"class": "form-control"}),
+            'contact_phone': forms.TextInput(attrs={"class": "form-control"}),
+            'address': forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            'city': forms.TextInput(attrs={"class": "form-control"}),
+            'state': forms.TextInput(attrs={"class": "form-control"}),
+            'postal_code': forms.TextInput(attrs={"class": "form-control"}),
+            'country': forms.TextInput(attrs={"class": "form-control"}),
+            'tax_id': forms.TextInput(attrs={"class": "form-control"}),
+            'is_active': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        subscription = kwargs.pop('subscription', None)
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['subscription_plan'].initial = self.instance.plan if self.instance.plan in {'trial', 'monthly', 'yearly'} else 'trial'
+        if subscription:
+            self.fields['subscription_plan'].initial = subscription.plan.code
+            self.fields['subscription_expiry'].initial = timezone.localtime(subscription.ends_at).date()
+
+    @transaction.atomic
+    def save(self, commit=True):
+        tenant = super().save(commit=False)
+        tenant.plan = self.cleaned_data['subscription_plan']
+        if commit:
+            tenant.save()
+            plan = SubscriptionPlan.objects.filter(code=tenant.plan, is_active=True).first()
+            expiry = self.cleaned_data.get('subscription_expiry')
+            if plan and expiry:
+                ends_at = timezone.make_aware(datetime.combine(expiry, time.min), timezone.get_current_timezone())
+                subscription = (
+                    TenantSubscription.objects
+                    .filter(tenant=tenant, status='active')
+                    .order_by('-ends_at')
+                    .first()
+                )
+                if subscription:
+                    subscription.plan = plan
+                    subscription.ends_at = ends_at
+                    subscription.save(update_fields=['plan', 'ends_at', 'updated_at'])
+                else:
+                    TenantSubscription.objects.create(
+                        tenant=tenant,
+                        plan=plan,
+                        starts_at=timezone.now(),
+                        ends_at=ends_at,
+                        status='active',
+                    )
+        return tenant
 
 
 class TenantModelFormMixin:
@@ -555,14 +672,11 @@ class CustomerForm(TenantModelFormMixin, forms.ModelForm):
     """Extended for credit system."""
     class Meta:
         model = Customer
-        fields = ['name','phone','email','credit_limit','sms_opt_in','call_opt_in']
+        fields = ['name','phone','email','sms_opt_in','call_opt_in']
         widgets = {
             'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Customer name"}),
             'phone': forms.TextInput(attrs={"class": "form-control", "placeholder": "Phone"}),
             'email': forms.EmailInput(attrs={"class": "form-control", "placeholder": "Email"}),
-            'credit_limit': forms.NumberInput(attrs={
-                "class": "form-control", "step": "0.01", "min": "0", "placeholder": "0.00"
-            }),
             'sms_opt_in': forms.CheckboxInput(attrs={"class": "form-check-input"}),
             'call_opt_in': forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -665,8 +779,6 @@ class SiteSettingForm(forms.ModelForm):
             # Org/Bill
             'org_name','org_address','org_phone','org_email',
             'bill_title','bill_footer','bill_tax_inclusive','printer_type',
-            # Credit
-            'credit_enforce','credit_alert_threshold',
             # SMS
             'sms_enabled','sms_provider','sms_api_key','sms_sender',
             # Calls
@@ -685,9 +797,6 @@ class SiteSettingForm(forms.ModelForm):
                 "class": "form-select js-enhance-select",
                 "data-placeholder": "Select printer type",
             }),
-
-            'credit_enforce': forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            'credit_alert_threshold': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
 
             'sms_enabled': forms.CheckboxInput(attrs={"class": "form-check-input"}),
             'sms_provider': forms.Select(attrs={

@@ -83,7 +83,7 @@ class SupplierAdmin(admin.ModelAdmin):
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['name', 'tenant', 'phone', 'email', 'credit_limit']
+    list_display = ['name', 'tenant', 'phone', 'email']
     list_filter = ['tenant']
     search_fields = ['name','phone','email','tenant__name','tenant__slug']
 

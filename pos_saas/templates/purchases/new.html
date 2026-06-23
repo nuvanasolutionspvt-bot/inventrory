@@ -25,6 +25,11 @@
             <label class="form-label">Date</label>
             {{ form.date|add_class:"form-control" }}
           </div>
+          <div class="col-md-5 d-flex align-items-start justify-content-md-end pt-4">
+            <a href="{% url 'supplier_create' %}" class="btn btn-outline-primary">
+              <i class="bi bi-person-plus me-1"></i>Add Supplier
+            </a>
+          </div>
           <div class="col-12">
             <label class="form-label">Notes</label>
             {{ form.notes|add_class:"form-control"|attr:"rows:2" }}

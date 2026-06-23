@@ -146,9 +146,7 @@
     <!-- ===== Right: Summary & Credit ===== -->
     <div class="col-12 col-lg-4">
       <div class="card shadow-sm pos-sticky"
-           id="credit_root"
-           data-enforce="{% if site_settings %}{{ site_settings.credit_enforce|yesno:'1,0' }}{% endif %}"
-           data-threshold="{% if site_settings %}{{ site_settings.credit_alert_threshold|default_if_none:80 }}{% else %}80{% endif %}">
+           id="credit_root">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
           <h6 class="m-0">Totals</h6>
           <small class="text-muted">Per-product tax auto</small>
@@ -211,12 +209,10 @@
               <div class="fw-semibold">Customer Credit</div>
               <span id="credit_state_chip" class="credit-chip credit-ok d-none">OK</span>
             </div>
-            <div id="credit_empty" class="small text-muted">Select a customer to view balance and limit.</div>
+            <div id="credit_empty" class="small text-muted">Select a customer to view balance.</div>
             <div id="credit_panel" class="d-none small">
               <div class="d-flex justify-content-between"><span>Balance</span><span id="cBal">₹ 0.00</span></div>
-              <div class="d-flex justify-content-between"><span>Limit</span><span id="cLim">₹ 0.00</span></div>
               <div class="d-flex justify-content-between"><span>After this sale</span><span id="cNew">₹ 0.00</span></div>
-              <div class="d-flex justify-content-between border-top pt-1 mt-1"><span>Available after</span><span id="cAvail">₹ 0.00</span></div>
               <div id="cMsg" class="mt-2"></div>
             </div>
           </div>
@@ -348,10 +344,6 @@ document.addEventListener('DOMContentLoaded', function(){
   
       const btn  = el('btnComplete');
       const err  = el('pos_error');
-      const root = el('credit_root');
-      const enforce   = (root?.dataset?.enforce === '1'); // default false
-      const threshold = parseFloat(root?.dataset?.threshold || '80');
-  
       const panel = el('credit_panel');
       const empty = el('credit_empty');
       const chip  = el('credit_state_chip');
@@ -394,43 +386,20 @@ document.addEventListener('DOMContentLoaded', function(){
       }
   
       const bal = num(info.balance,0);
-      const lim = num(info.credit_limit,0);
       const newBal = bal + creditToPost;
-      const avail  = lim>0 ? (lim - newBal) : 0;
-      const usagePct = lim>0 ? (newBal/lim*100) : 0;
   
       // Fill panel
       txt('cBal',  money(bal));
-      txt('cLim',  money(lim));
       txt('cNew',  money(newBal));
-      txt('cAvail', money(avail));
   
       panel?.classList.remove('d-none'); empty?.classList.add('d-none');
       chip?.classList.remove('d-none','credit-ok','credit-warn','credit-block');
       msg.className = 'mt-2 small';
       err?.classList.add('d-none');
-  
-      // If there is credit to post, evaluate limit; otherwise just show “OK”
-      if (creditToPost > 0 && lim > 0 && newBal > lim){
-        chip.textContent = 'OVER LIMIT';
-        chip.classList.add('credit-block');
-        msg.innerHTML = 'This sale exceeds the customer’s credit limit by <b>' + money(newBal - lim) + '</b>.';
-        if (enforce && btn) btn.disabled = true; else if (btn) btn.disabled = false;
-        if (err){
-          err.innerHTML = enforce
-            ? 'Credit limit exceeded. Reduce due or collect more payment.'
-            : 'Credit limit exceeded. You can still proceed (enforcement disabled).';
-          err.classList.remove('d-none');
-        }
-      } else {
-        const warn = (creditToPost > 0 && lim > 0 && usagePct >= (threshold||80));
-        chip.textContent = warn ? 'NEAR LIMIT' : 'OK';
-        chip.classList.add(warn ? 'credit-warn' : 'credit-ok');
-        msg.textContent = (lim>0)
-          ? `Usage after sale: ${usagePct.toFixed(0)}% of limit.`
-          : 'No credit limit set for this customer.';
-        if (btn) btn.disabled = false;
-      }
+      chip.textContent = 'UNLIMITED';
+      chip.classList.add('credit-ok');
+      msg.textContent = 'Customer credit is unlimited.';
+      if (btn) btn.disabled = false;
     };
   
     // Wire changes that affect credit UI
