@@ -1,6 +1,7 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -17,6 +18,18 @@ from .models import (
 # ---------------------------
 # Auth / Security Forms
 # ---------------------------
+
+class CompanyAuthenticationForm(AuthenticationForm):
+    """Only platform superusers may authenticate through the company portal."""
+
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        if not user.is_superuser:
+            raise ValidationError(
+                "Please enter a correct username and password.",
+                code="invalid_login",
+            )
+
 
 RESERVED_TENANT_SLUGS = {
     'admin', 'api', 'auth', 'backup', 'credit', 'customers', 'dashboard',
@@ -234,7 +247,7 @@ class TenantRegistrationForm(forms.Form):
             password=self.cleaned_data['password1'],
             first_name=name_parts[0],
             last_name=name_parts[1] if len(name_parts) > 1 else '',
-            is_staff=True,
+            is_staff=False,
         )
         user.groups.add(self._admin_group())
         TenantMembership.objects.create(tenant=tenant, user=user, role='owner')

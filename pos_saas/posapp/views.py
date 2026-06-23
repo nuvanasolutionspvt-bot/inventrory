@@ -133,7 +133,7 @@ def _valid_razorpay_signature(order_id, payment_id, signature):
 
 
 def _company_admin_required(user):
-    return user.is_authenticated and user.is_staff
+    return user.is_authenticated and user.is_superuser
 
 
 def _business_rows():
