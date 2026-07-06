@@ -60,37 +60,6 @@
               {% endif %}
             </div>
 
-            {% if form.batch_no %}
-              <div class="col-md-3">
-                <label class="form-label">Batch No <span class="text-danger">*</span></label>
-                {{ form.batch_no }}
-                {% if form.batch_no.errors %}
-                  <div class="invalid-feedback">{{ form.batch_no.errors|striptags }}</div>
-                {% endif %}
-              </div>
-            {% endif %}
-
-            {% if form.manufacture_date %}
-              <div class="col-md-3">
-                <label class="form-label">Date of Manufacture <span class="text-danger">*</span></label>
-                {{ form.manufacture_date }}
-                {% if form.manufacture_date.errors %}
-                  <div class="invalid-feedback">{{ form.manufacture_date.errors|striptags }}</div>
-                {% endif %}
-              </div>
-            {% endif %}
-
-            {% if form.expiry_date %}
-              <div class="col-md-3">
-                <label class="form-label">Date of Expiry</label>
-                {{ form.expiry_date }}
-                {% if form.expiry_date.errors %}
-                  <div class="invalid-feedback">{{ form.expiry_date.errors|striptags }}</div>
-                {% else %}
-                  <div class="form-text">Optional.</div>
-                {% endif %}
-              </div>
-            {% endif %}
           </div>
         </div>
 

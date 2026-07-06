@@ -65,10 +65,13 @@ function productOptionsHTML() {
     const code = o.dataset.code || '';
     const barcode = o.dataset.barcode || '';
     const price = o.dataset.price || '0';
+    const salePrice = o.dataset.salePrice || o.dataset.price || '0';
     const tax = o.dataset.tax || '0';
     const stock = o.dataset.stock || '';
+    const productId = o.dataset.productId || '';
+    const batchId = o.dataset.batchId || '';
     rows.push(
-      `<option value="${escapeAttr(key)}" data-key="${escapeAttr(key)}" data-kind="${escapeAttr(kind)}" data-id="${escapeAttr(id)}" data-code="${escapeAttr(code)}" data-barcode="${escapeAttr(barcode)}" data-price="${escapeAttr(price)}" data-tax="${escapeAttr(tax)}" data-stock="${escapeAttr(stock)}">${escapeHTML(text)}</option>`
+      `<option value="${escapeAttr(key)}" data-key="${escapeAttr(key)}" data-kind="${escapeAttr(kind)}" data-id="${escapeAttr(id)}" data-product-id="${escapeAttr(productId)}" data-batch-id="${escapeAttr(batchId)}" data-code="${escapeAttr(code)}" data-barcode="${escapeAttr(barcode)}" data-price="${escapeAttr(price)}" data-sale-price="${escapeAttr(salePrice)}" data-tax="${escapeAttr(tax)}" data-stock="${escapeAttr(stock)}">${escapeHTML(text)}</option>`
     );
   });
   return rows.join('');
@@ -105,16 +108,167 @@ function getRowLabel(row) {
   return opt ? opt.value : '';
 }
 
+function setFieldError(input, message) {
+  if (!input) return;
+  input.classList.add('is-invalid');
+  const field = input.closest('.purchase-field') || input.parentElement;
+  const feedback = q('.invalid-feedback', field);
+  if (feedback) feedback.textContent = message;
+}
+
+function clearFieldError(input) {
+  if (!input) return;
+  input.classList.remove('is-invalid');
+  const field = input.closest('.purchase-field') || input.parentElement;
+  const feedback = q('.invalid-feedback', field);
+  if (feedback) feedback.textContent = '';
+}
+
+function validateNonNegativeInput(input, message) {
+  const raw = String(input?.value ?? '').trim();
+  if (raw === '') {
+    clearFieldError(input);
+    return true;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    setFieldError(input, message);
+    return false;
+  }
+  clearFieldError(input);
+  return true;
+}
+
+function validatePharmacyPurchaseRow(row) {
+  if (!row) return false;
+  let ok = true;
+  const productInput = q('.product-input', row);
+  const batchInput = q('.batch-input', row);
+  const manufactureInput = q('.manufacture-date-input', row);
+  const expiryInput = q('.expiry-date-input', row);
+  const qtyInput = q('.qty-input', row);
+  const purchaseRateInput = q('.price-input', row);
+  const salePriceInput = q('.sale-price-input', row);
+  const mrpInput = q('.mrp-input', row);
+
+  if (!findOption(getProductControlValue(productInput))) {
+    setFieldError(productInput, 'Select a product.');
+    ok = false;
+  } else {
+    clearFieldError(productInput);
+  }
+
+  if (!String(batchInput?.value || '').trim()) {
+    setFieldError(batchInput, 'Batch number is required.');
+    ok = false;
+  } else {
+    clearFieldError(batchInput);
+  }
+
+  if (!manufactureInput?.value) {
+    setFieldError(manufactureInput, 'Manufacture date is required.');
+    ok = false;
+  } else {
+    clearFieldError(manufactureInput);
+  }
+
+  if (!expiryInput?.value) {
+    setFieldError(expiryInput, 'Expiry date is required.');
+    ok = false;
+  } else if (manufactureInput?.value && expiryInput.value <= manufactureInput.value) {
+    setFieldError(expiryInput, 'Expiry date must be after manufacture date.');
+    ok = false;
+  } else {
+    clearFieldError(expiryInput);
+  }
+
+  const qty = Number(qtyInput?.value || 0);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    setFieldError(qtyInput, 'Quantity must be greater than zero.');
+    ok = false;
+  } else {
+    clearFieldError(qtyInput);
+  }
+
+  if (!validateNonNegativeInput(purchaseRateInput, 'Purchase rate must be non-negative.')) ok = false;
+  if (!validateNonNegativeInput(salePriceInput, 'Sale price must be non-negative.')) ok = false;
+  if (!validateNonNegativeInput(mrpInput, 'MRP must be non-negative.')) ok = false;
+
+  row.classList.toggle('has-validation-error', !ok);
+  return ok;
+}
+
+function validatePharmacyPurchaseRows() {
+  const rows = qa('#items-table tbody tr');
+  let ok = rows.length > 0;
+  rows.forEach(row => {
+    if (!validatePharmacyPurchaseRow(row)) ok = false;
+  });
+  const firstInvalid = q('#items-table .is-invalid');
+  if (firstInvalid) firstInvalid.focus();
+  return ok;
+}
+
 /** Create a new blank line row */
 function addItemRow(kind) {
   const tbody = q('#items-table tbody');
+  const rowKind = kind || window.ITEMS_KIND || 'sale';
+  const isPurchase = rowKind === 'purchase';
+  const isPharmacyPurchase = isPurchase && !!window.PURCHASE_IS_PHARMACY;
+  const isTradePurchase = isPurchase && !isPharmacyPurchase && !!window.PURCHASE_SHOW_PRICING;
+  const productCell = isPharmacyPurchase
+    ? `<td class="purchase-field purchase-field-product">
+        <select class="form-select form-select-sm product-input js-enhance-select" data-placeholder="Select product" aria-label="Product">${productOptionsHTML()}</select>
+        <div class="invalid-feedback"></div>
+      </td>`
+    : `<td><select class="form-select form-select-sm product-input js-enhance-select" data-placeholder="Select product">${productOptionsHTML()}</select></td>`;
+  const batchCells = isPharmacyPurchase ? `
+    <td class="purchase-field purchase-field-batch">
+      <input type="text" class="form-control form-control-sm batch-input" placeholder="Batch number" aria-label="Batch number">
+      <div class="invalid-feedback"></div>
+    </td>
+    <td class="purchase-field purchase-field-date">
+      <input type="date" class="form-control form-control-sm manufacture-date-input" aria-label="Manufacture date">
+      <div class="invalid-feedback"></div>
+    </td>
+    <td class="purchase-field purchase-field-date">
+      <input type="date" class="form-control form-control-sm expiry-date-input" aria-label="Expiry date">
+      <div class="invalid-feedback"></div>
+    </td>
+  ` : '';
+  const priceCells = isPharmacyPurchase ? `
+    <td class="purchase-field purchase-field-money">
+      <input type="number" step="0.01" min="0" class="form-control form-control-sm sale-price-input text-end" placeholder="0.00" aria-label="Sale price">
+      <div class="invalid-feedback"></div>
+    </td>
+    <td class="purchase-field purchase-field-money">
+      <input type="number" step="0.01" min="0" class="form-control form-control-sm mrp-input text-end" placeholder="0.00" aria-label="MRP">
+      <div class="invalid-feedback"></div>
+    </td>
+  ` : (isTradePurchase ? `
+    <td>
+      <input type="number" step="0.01" min="0" value="0" class="form-control form-control-sm sale-price-input text-end" placeholder="0.00" aria-label="Selling price">
+    </td>
+    <td class="profit-per-unit text-end fw-semibold">0.00</td>
+  ` : '');
   const tr = document.createElement('tr');
+  if (isPharmacyPurchase) tr.className = 'purchase-pharmacy-row';
   tr.innerHTML = `
-    <td><select class="form-select form-select-sm product-input js-enhance-select" data-placeholder="Select product">${productOptionsHTML()}</select></td>
-    <td><input type="number" min="1" value="1" class="form-control form-control-sm qty-input text-end"></td>
-    <td><input type="number" step="0.01" min="0" value="0" class="form-control form-control-sm price-input text-end"></td>
-    <td class="line-total text-end">0.00</td>
-    <td style="width:52px"><button type="button" class="btn btn-sm btn-outline-danger" title="Remove" aria-label="Remove row">&times;</button></td>
+    ${productCell}
+    ${batchCells}
+    <td class="${isPharmacyPurchase ? 'purchase-field purchase-field-qty' : ''}">
+      <input type="number" min="1" value="1" class="form-control form-control-sm qty-input text-end" placeholder="Qty" aria-label="Quantity">
+      ${isPharmacyPurchase ? '<div class="invalid-feedback"></div>' : ''}
+    </td>
+    <td class="${isPharmacyPurchase ? 'purchase-field purchase-field-money' : ''}">
+      <input type="number" step="0.01" min="0" ${isPharmacyPurchase ? '' : 'value="0"'} class="form-control form-control-sm price-input text-end" placeholder="0.00" aria-label="${isPharmacyPurchase ? 'Purchase rate' : 'Cost'}">
+      ${isPharmacyPurchase ? '<div class="invalid-feedback"></div>' : ''}
+    </td>
+    ${priceCells}
+    <td class="${isPharmacyPurchase ? 'purchase-field purchase-field-total' : 'line-total text-end'}">
+      ${isPharmacyPurchase ? '<div class="line-total text-end fw-semibold">0.00</div>' : '0.00'}
+    </td>
+    <td class="${isPharmacyPurchase ? 'purchase-field purchase-field-remove' : ''}" style="width:52px"><button type="button" class="btn btn-sm btn-outline-danger remove-row-btn" title="Remove" aria-label="Remove row">&times;</button></td>
   `;
   tbody.appendChild(tr);
 
@@ -126,16 +280,41 @@ function addItemRow(kind) {
   const applyOption = (opt) => {
     if (!opt) return;
     setProductControlValue(productInput, opt);
-    const defaultPrice = parseFloat(opt.dataset.price || '0') || 0;
-    priceInput.value = defaultPrice.toFixed(2);
+    if (!isPharmacyPurchase) {
+      const defaultPrice = parseFloat(opt.dataset.price || '0') || 0;
+      priceInput.value = defaultPrice.toFixed(2);
+      if (isTradePurchase) {
+        const sellingPrice = parseFloat(opt.dataset.salePrice || '0') || 0;
+        const saleInput = q('.sale-price-input', tr);
+        if (saleInput) saleInput.value = sellingPrice.toFixed(2);
+      }
+      const isBatch = (opt.dataset.kind || '') === 'batch';
+      priceInput.readOnly = isBatch;
+      priceInput.title = isBatch ? 'Price comes from the selected purchase batch.' : '';
+    }
     if (!qtyInput.value || qtyInput.value === '0') qtyInput.value = '1';
+    if (isPharmacyPurchase) validatePharmacyPurchaseRow(tr);
     recalcTotals();
   };
 
   productInput.addEventListener('change', () => applyOption(findOption(productInput.value)));
 
-  qtyInput.addEventListener('input', recalcTotals);
-  priceInput.addEventListener('input', recalcTotals);
+  qtyInput.addEventListener('input', () => {
+    if (isPharmacyPurchase) validatePharmacyPurchaseRow(tr);
+    recalcTotals();
+  });
+  priceInput.addEventListener('input', () => {
+    if (isPharmacyPurchase) validatePharmacyPurchaseRow(tr);
+    recalcTotals();
+  });
+  q('.sale-price-input', tr)?.addEventListener('input', () => {
+    if (isPharmacyPurchase) validatePharmacyPurchaseRow(tr);
+    recalcTotals();
+  });
+  q('.mrp-input', tr)?.addEventListener('input', () => { validatePharmacyPurchaseRow(tr); buildItemsJSON(); });
+  q('.batch-input', tr)?.addEventListener('input', () => { validatePharmacyPurchaseRow(tr); buildItemsJSON(); });
+  q('.manufacture-date-input', tr)?.addEventListener('input', () => { validatePharmacyPurchaseRow(tr); buildItemsJSON(); });
+  q('.expiry-date-input', tr)?.addEventListener('input', () => { validatePharmacyPurchaseRow(tr); buildItemsJSON(); });
   removeBtn.addEventListener('click', () => { tr.remove(); recalcTotals(); });
 
   if (typeof window.initTomSelects === 'function') window.initTomSelects(tr);
@@ -149,6 +328,7 @@ function recalcTotals() {
   let subtotal = 0;
   let taxTotal = 0;
 
+  const isPurchase = (window.ITEMS_KIND || 'sale') === 'purchase';
   const isReturn = byId('id_is_return')?.checked;
 
   let stockProblem = false;
@@ -167,7 +347,7 @@ function recalcTotals() {
       taxPercent = parseFloat(matched.dataset.tax || '0') || 0;
 
       // stock guard only for normal sales
-      if (!isReturn) {
+      if (!isPurchase && !isReturn) {
         const ds = matched.dataset.stock;
         const avail = (ds !== undefined && ds !== null && ds !== '') ? parseInt(ds, 10) : null;
         if (avail !== null && qty > avail) {
@@ -181,12 +361,23 @@ function recalcTotals() {
       } else {
         r.classList.remove('table-danger');
       }
-    } else {
+    } else if (!isPurchase) {
       // unmatched product: keep row but highlight to user
       r.classList.add('table-danger');
+    } else {
+      r.classList.remove('table-danger');
     }
 
     const lt = qty * price;
+    const salePriceInput = q('.sale-price-input', r);
+    const profitCell = q('.profit-per-unit', r);
+    if (profitCell) {
+      const salePrice = parseFloat(salePriceInput?.value || '0');
+      const profit = (Number.isFinite(salePrice) ? salePrice : 0) - (Number.isFinite(price) ? price : 0);
+      profitCell.innerText = profit.toFixed(2);
+      profitCell.classList.toggle('text-danger', profit < 0);
+      profitCell.classList.toggle('text-success', profit >= 0);
+    }
     subtotal += lt;
     taxTotal += (lt * taxPercent / 100.0);
     const cell = q('.line-total', r);
@@ -238,6 +429,8 @@ function recalcTotals() {
 function buildItemsJSON() {
   const rows = qa('#items-table tbody tr');
   const items = [];
+  const isPurchase = (window.ITEMS_KIND || 'sale') === 'purchase';
+  const isPharmacyPurchase = isPurchase && !!window.PURCHASE_IS_PHARMACY;
 
   rows.forEach(r => {
     const productControl = q('.product-input', r);
@@ -253,8 +446,30 @@ function buildItemsJSON() {
         const kind = opt.dataset.kind || 'product';
         const catalogKey = opt.dataset.key || `${kind}:${pid}`;
         const item = { kind: kind, catalog_key: catalogKey, qty: qty, unit_price: p, price: p };
-        if (kind === 'set') item.set_id = pid;
-        else item.product_id = pid;
+        if (kind === 'set') {
+          item.set_id = pid;
+        } else if (kind === 'batch') {
+          item.batch_id = pid;
+          item.product_id = parseInt(opt.dataset.productId || '0', 10) || null;
+        } else {
+          item.product_id = pid;
+        }
+        if (isPurchase) {
+          item.purchase_item_id = r.dataset.purchaseItemId || '';
+          item.product_batch_id = r.dataset.productBatchId || '';
+          item.cost_price = p;
+          item.purchase_rate = p;
+          if (!isPharmacyPurchase && window.PURCHASE_SHOW_PRICING) {
+            item.sale_price = parseFloat(q('.sale-price-input', r)?.value || '0') || 0;
+          }
+        }
+        if (isPharmacyPurchase) {
+          item.batch_no = q('.batch-input', r)?.value || '';
+          item.manufacture_date = q('.manufacture-date-input', r)?.value || '';
+          item.expiry_date = q('.expiry-date-input', r)?.value || '';
+          item.sale_price = parseFloat(q('.sale-price-input', r)?.value || '0') || 0;
+          item.mrp = parseFloat(q('.mrp-input', r)?.value || '0') || 0;
+        }
         items.push(item);
       }
     }
@@ -332,10 +547,12 @@ function restoreItemsFromJSON(jsonStr) {
 
   tbody.innerHTML = '';
   arr.forEach(item => {
-    addItemRow('sale');
+    addItemRow(window.ITEMS_KIND || 'sale');
     const tr = q('#items-table tbody tr:last-child');
-    const kind = item.kind || (item.set_id ? 'set' : 'product');
-    const lookupId = kind === 'set' ? item.set_id : item.product_id;
+    tr.dataset.purchaseItemId = item.purchase_item_id || '';
+    tr.dataset.productBatchId = item.product_batch_id || '';
+    const kind = item.kind || (item.batch_id ? 'batch' : (item.set_id ? 'set' : 'product'));
+    const lookupId = kind === 'set' ? item.set_id : (kind === 'batch' ? item.batch_id : item.product_id);
     const opt = q(`#products option[data-kind="${kind}"][data-id="${lookupId}"]`);
     const displayValue = opt ? opt.value : '';
     const prodInput = q('.product-input', tr);
@@ -346,6 +563,20 @@ function restoreItemsFromJSON(jsonStr) {
     if (qtyInput)  qtyInput.value = parseInt(item.qty || 1, 10);
     const p = (item.unit_price ?? item.price ?? 0);
     if (prInput)   prInput.value = (typeof p === 'number') ? p.toFixed(2) : String(p);
+    if (prInput && kind === 'batch') {
+      prInput.readOnly = true;
+      prInput.title = 'Price comes from the selected purchase batch.';
+    }
+    const batchInput = q('.batch-input', tr);
+    const manufactureDateInput = q('.manufacture-date-input', tr);
+    const expiryDateInput = q('.expiry-date-input', tr);
+    const salePriceInput = q('.sale-price-input', tr);
+    const mrpInput = q('.mrp-input', tr);
+    if (batchInput) batchInput.value = item.batch_no || '';
+    if (manufactureDateInput) manufactureDateInput.value = item.manufacture_date || '';
+    if (expiryDateInput) expiryDateInput.value = item.expiry_date || '';
+    if (salePriceInput) salePriceInput.value = String(item.sale_price ?? 0);
+    if (mrpInput) mrpInput.value = String(item.mrp ?? 0);
   });
 
   recalcTotals();
@@ -355,13 +586,17 @@ function restoreItemsFromJSON(jsonStr) {
 /* ===== Boot ===== */
 
 document.addEventListener('DOMContentLoaded', function () {
+  const purchaseForm = byId('purchase-form');
+
   // restore rows after validation error
-  let restored = false;
-  const hidden = byId('items_json');
-  if (hidden && hidden.value && hidden.value.trim().length > 2) {
-    try { restored = restoreItemsFromJSON(hidden.value); } catch (_) { restored = false; }
+  if (!purchaseForm) {
+    let restored = false;
+    const hidden = byId('items_json');
+    if (hidden && hidden.value && hidden.value.trim().length > 2) {
+      try { restored = restoreItemsFromJSON(hidden.value); } catch (_) { restored = false; }
+    }
+    if (!restored && !q('#items-table tbody tr')) addItemRow(window.ITEMS_KIND || 'sale');
   }
-  if (!restored && !q('#items-table tbody tr')) addItemRow('sale');
 
   // quick scan focus (F2)
   document.addEventListener('keydown', function(e){
@@ -419,6 +654,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const box = byId('pos_error');
         if (box) { box.textContent = 'Cannot proceed: not enough stock for one or more items.'; box.classList.remove('d-none'); }
         return;
+      }
+    });
+  }
+
+  if (purchaseForm) {
+    purchaseForm.addEventListener('submit', function (ev) {
+      if (window.PURCHASE_IS_PHARMACY && !validatePharmacyPurchaseRows()) {
+        ev.preventDefault();
+        return;
+      }
+      const items = buildItemsJSON();
+      if (!items.length) {
+        ev.preventDefault();
+        alert('Add at least one item before saving the purchase.');
       }
     });
   }

@@ -124,7 +124,7 @@
             <table class="table table-sm table-sticky table-compact align-middle" id="items-table">
               <thead>
                 <tr>
-                  <th class="product-col">Product</th>
+                  <th class="product-col">{% if is_pharmacy %}Product / Batch{% else %}Product{% endif %}</th>
                   <th class="qty-col text-end">Qty</th>
                   <th class="price-col text-end">Price</th>
                   <th class="line-col text-end">Line Total</th>
@@ -235,6 +235,23 @@
 
 <!-- Product catalog for <datalist> -->
 <datalist id="products">
+  {% if is_pharmacy %}
+  {% for batch in product_batches %}
+    <option
+      data-kind="batch"
+      data-key="batch:{{ batch.id }}"
+      data-id="{{ batch.id }}"
+      data-batch-id="{{ batch.id }}"
+      data-product-id="{{ batch.product_id }}"
+      data-code="{{ batch.product.code }}"
+      data-price="{{ batch.sale_price }}"
+      data-barcode="{{ batch.product.barcode }}"
+      data-tax="{{ batch.product.tax_percent }}"
+      data-stock="{% if batch.stock_available %}{{ batch.available_qty }}{% else %}0{% endif %}"
+      value="{{ batch.product.code }} - {{ batch.product.name }} | Batch {{ batch.batch_no }} | Exp {{ batch.expiry_date|date:'Y-m-d' }} | Stock {{ batch.available_qty }}{% if not batch.stock_available %} | Not sellable{% endif %}">
+    </option>
+  {% endfor %}
+  {% else %}
   {% for p in products %}
     <option
       data-kind="product"
@@ -260,7 +277,256 @@
       value="{{ s.code }} - {{ s.name }} (Set)">
     </option>
   {% endfor %}
+  {% endif %}
 </datalist>
+
+<script>window.POS_IS_PHARMACY = {% if is_pharmacy %}true{% else %}false{% endif %};</script>
+
+<script>
+(function() {
+  function catalogOptions() {
+    var html = ['<option value="">Select product</option>'];
+    document.querySelectorAll('#products option').forEach(function(source) {
+      var key = source.dataset.key || ((source.dataset.kind || 'product') + ':' + (source.dataset.id || ''));
+      html.push('<option value="' + key + '"' +
+        ' data-key="' + key + '"' +
+        ' data-kind="' + (source.dataset.kind || 'product') + '"' +
+        ' data-id="' + (source.dataset.id || '') + '"' +
+        ' data-product-id="' + (source.dataset.productId || '') + '"' +
+        ' data-price="' + (source.dataset.price || '0') + '"' +
+        ' data-tax="' + (source.dataset.tax || '0') + '"' +
+        ' data-stock="' + (source.dataset.stock || '0') + '">' +
+        source.value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</option>');
+    });
+    return html.join('');
+  }
+
+  function selectedOption(row) {
+    var select = row.querySelector('.product-input');
+    if (!select) return null;
+    var value = select.tomselect ? select.tomselect.getValue() : select.value;
+    value = Array.isArray(value) ? value[0] : String(value || '');
+    var option = Array.from(select.options).find(function(candidate) {
+      return candidate.value === value || candidate.dataset.key === value;
+    });
+    if (option && option.dataset.id) return option;
+    return Array.from(document.querySelectorAll('#products option')).find(function(candidate) {
+      var candidateKey = candidate.dataset.key || ((candidate.dataset.kind || 'product') + ':' + (candidate.dataset.id || ''));
+      return candidateKey === value;
+    }) || null;
+  }
+
+  function serializePOSItems() {
+    var items = [];
+    document.querySelectorAll('#items-table tbody tr').forEach(function(row) {
+      var option = selectedOption(row);
+      var qty = parseInt(row.querySelector('.qty-input')?.value || '0', 10);
+      var price = parseFloat(row.querySelector('.price-input')?.value || '0');
+      if (!option || qty <= 0) return;
+      if (!Number.isFinite(price)) price = parseFloat(option.dataset.price || '0') || 0;
+      var select = row.querySelector('.product-input');
+      var selectedKey = select?.tomselect ? select.tomselect.getValue() : select?.value;
+      selectedKey = Array.isArray(selectedKey) ? selectedKey[0] : String(selectedKey || '');
+      var kind = option.dataset.kind || (selectedKey.split(':')[0] || 'product');
+      var id = parseInt(option.dataset.id || selectedKey.split(':')[1] || '0', 10);
+      if (!id) return;
+      var item = {kind: kind, catalog_key: option.dataset.key || selectedKey || (kind + ':' + id), qty: qty, unit_price: price, price: price};
+      if (kind === 'batch') {
+        item.batch_id = id;
+        item.product_id = parseInt(option.dataset.productId || '0', 10) || null;
+      } else if (kind === 'set') {
+        item.set_id = id;
+      } else {
+        item.product_id = id;
+      }
+      items.push(item);
+    });
+    var hidden = document.getElementById('items_json');
+    if (hidden) hidden.value = JSON.stringify(items);
+    return items;
+  }
+
+  function recalculatePOS() {
+    var subtotal = 0;
+    var tax = 0;
+    var stockErrors = [];
+    var isReturn = !!document.getElementById('id_is_return')?.checked;
+    document.querySelectorAll('#items-table tbody tr').forEach(function(row) {
+      var option = selectedOption(row);
+      var qty = parseFloat(row.querySelector('.qty-input')?.value || '0') || 0;
+      var price = parseFloat(row.querySelector('.price-input')?.value || '0') || 0;
+      var lineTotal = qty * price;
+      var taxPercent = option ? (parseFloat(option.dataset.tax || '0') || 0) : 0;
+      subtotal += lineTotal;
+      tax += lineTotal * taxPercent / 100;
+      var lineCell = row.querySelector('.line-total');
+      if (lineCell) lineCell.textContent = lineTotal.toFixed(2);
+      var available = option ? parseInt(option.dataset.stock || '0', 10) : 0;
+      var insufficient = !!option && !isReturn && qty > available;
+      row.classList.toggle('table-danger', insufficient);
+      if (insufficient) stockErrors.push((option.textContent || 'Product') + ': requested ' + qty + ', in stock ' + available);
+    });
+    var discount = parseFloat(document.getElementById('id_discount')?.value || '0') || 0;
+    var grand = subtotal - discount + tax;
+    if (isReturn) { subtotal = -subtotal; tax = -tax; grand = -grand; }
+    [['subtotal', subtotal], ['discount', discount], ['tax', tax], ['grand_total', grand]].forEach(function(pair) {
+      var element = document.getElementById(pair[0]);
+      if (element) element.textContent = pair[1].toFixed(2);
+    });
+    serializePOSItems();
+    var errorBox = document.getElementById('pos_error');
+    var complete = document.getElementById('btnComplete');
+    window._pos_stock_block = stockErrors.length > 0;
+    if (stockErrors.length) {
+      if (errorBox) { errorBox.innerHTML = 'Not enough stock for:<br>' + stockErrors.join('<br>'); errorBox.classList.remove('d-none'); }
+      if (complete) complete.disabled = true;
+    } else {
+      if (errorBox) errorBox.classList.add('d-none');
+      if (complete) complete.disabled = false;
+    }
+    if (typeof window.updateCreditAlert === 'function') window.updateCreditAlert();
+  }
+
+  function addPOSRow(prefill) {
+    prefill = prefill || {};
+    var tbody = document.querySelector('#items-table tbody');
+    if (!tbody) return;
+    var row = document.createElement('tr');
+    row.innerHTML = `
+      <td><select class="form-select form-select-sm product-input js-enhance-select" data-placeholder="Select product">${catalogOptions()}</select></td>
+      <td><input type="number" min="1" value="1" class="form-control form-control-sm qty-input text-end" aria-label="Quantity"></td>
+      <td><input type="number" step="0.01" min="0" value="0" class="form-control form-control-sm price-input text-end" aria-label="Price"></td>
+      <td class="line-total text-end fw-semibold">0.00</td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger remove-row-btn" aria-label="Remove row">&times;</button></td>`;
+    tbody.appendChild(row);
+    var product = row.querySelector('.product-input');
+    var qty = row.querySelector('.qty-input');
+    var price = row.querySelector('.price-input');
+    var kind = prefill.kind || (prefill.batch_id ? 'batch' : (prefill.set_id ? 'set' : 'product'));
+    var id = kind === 'batch' ? prefill.batch_id : (kind === 'set' ? prefill.set_id : prefill.product_id);
+    product.value = prefill.catalog_key || (id ? kind + ':' + id : '');
+    qty.value = prefill.qty || 1;
+    price.value = prefill.unit_price ?? prefill.price ?? 0;
+    if (kind === 'batch') price.readOnly = true;
+    product.addEventListener('change', function() {
+      var option = selectedOption(row);
+      if (option) {
+        price.value = parseFloat(option.dataset.price || '0').toFixed(2);
+        price.readOnly = option.dataset.kind === 'batch';
+      }
+      recalculatePOS();
+    });
+    qty.addEventListener('input', recalculatePOS);
+    price.addEventListener('input', recalculatePOS);
+    row.querySelector('.remove-row-btn').addEventListener('click', function() { row.remove(); recalculatePOS(); });
+    if (typeof window.initTomSelects === 'function') window.initTomSelects(row);
+    recalculatePOS();
+    return row;
+  }
+
+  function restorePOSItems(jsonText) {
+    var items = [];
+    try { items = JSON.parse(jsonText || '[]'); } catch (_) { items = []; }
+    if (!items.length) return false;
+    var tbody = document.querySelector('#items-table tbody');
+    if (!tbody) return false;
+    tbody.innerHTML = '';
+    items.forEach(addPOSRow);
+    return true;
+  }
+
+  function findCatalogItem(searchText) {
+    var text = String(searchText || '').trim();
+    var upper = text.toUpperCase();
+    if (!text) return null;
+    return Array.from(document.querySelectorAll('#products option')).find(function(option) {
+      var key = option.dataset.key || ((option.dataset.kind || 'product') + ':' + (option.dataset.id || ''));
+      var code = String(option.dataset.code || '').toUpperCase();
+      var barcode = String(option.dataset.barcode || '');
+      var label = String(option.value || '');
+      return key === text || label === text || barcode === text || code === upper || label.toUpperCase().startsWith(upper + ' -');
+    }) || null;
+  }
+
+  function addFromQuickScan() {
+    var quick = document.getElementById('quick_scan');
+    var source = findCatalogItem(quick?.value);
+    if (!source) return false;
+    var kind = source.dataset.kind || 'product';
+    var id = parseInt(source.dataset.id || '0', 10);
+    var key = source.dataset.key || (kind + ':' + id);
+
+    var existing = Array.from(document.querySelectorAll('#items-table tbody tr')).find(function(row) {
+      var option = selectedOption(row);
+      return option && (option.dataset.key || ((option.dataset.kind || 'product') + ':' + option.dataset.id)) === key;
+    });
+    if (existing) {
+      var qtyInput = existing.querySelector('.qty-input');
+      qtyInput.value = String((parseInt(qtyInput.value || '0', 10) || 0) + 1);
+    } else {
+      addPOSRow({
+        kind: kind,
+        catalog_key: key,
+        batch_id: kind === 'batch' ? id : null,
+        set_id: kind === 'set' ? id : null,
+        product_id: kind === 'product' ? id : (parseInt(source.dataset.productId || '0', 10) || null),
+        qty: 1,
+        unit_price: parseFloat(source.dataset.price || '0') || 0
+      });
+    }
+    if (quick) quick.value = '';
+    recalculatePOS();
+    return true;
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    window.addItemRow = function() { return addPOSRow(); };
+    window.buildItemsJSON = serializePOSItems;
+    window.recalcTotals = recalculatePOS;
+    window.restoreItemsFromJSON = restorePOSItems;
+    window.addPOSFromQuickScan = addFromQuickScan;
+    window.removeUnselectedRows = function() {
+      document.querySelectorAll('#items-table tbody tr').forEach(function(row) { if (!selectedOption(row)?.dataset.id) row.remove(); });
+    };
+    window.describeCartItems = function() {
+      return Array.from(document.querySelectorAll('#items-table tbody tr')).map(function(row) {
+        var option = selectedOption(row); var qty = parseInt(row.querySelector('.qty-input')?.value || '0', 10);
+        return option && option.dataset.id && qty > 0 ? option.textContent + ' x ' + qty : '';
+      }).filter(Boolean);
+    };
+
+    var hidden = document.getElementById('items_json');
+    if (!document.querySelector('#items-table tbody tr')) {
+      if (!(hidden && hidden.value && restorePOSItems(hidden.value))) addPOSRow();
+    }
+    var addButton = document.getElementById('btnAddRow');
+    addButton?.addEventListener('click', function(event) {
+      event.preventDefault(); event.stopImmediatePropagation(); addPOSRow();
+    }, true);
+    var clearButton = document.getElementById('btnClear');
+    clearButton?.addEventListener('click', function(event) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      var tbody = document.querySelector('#items-table tbody'); if (tbody) tbody.innerHTML = '';
+      addPOSRow();
+    }, true);
+    document.getElementById('id_discount')?.addEventListener('input', recalculatePOS);
+    document.getElementById('id_is_return')?.addEventListener('change', recalculatePOS);
+    document.getElementById('quick_scan')?.addEventListener('keydown', function(event) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!addFromQuickScan()) {
+        var errorBox = document.getElementById('pos_error');
+        if (errorBox) {
+          errorBox.textContent = 'No matching product found. Select a valid product, code, or barcode.';
+          errorBox.classList.remove('d-none');
+        }
+      }
+    }, true);
+    recalculatePOS();
+  });
+})();
+</script>
 <!-- Quick Add Customer Modal -->
 <div class="modal fade" id="quickCustomerModal" tabindex="-1" aria-labelledby="quickCustomerLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -551,6 +817,9 @@ document.addEventListener('DOMContentLoaded', function(){
   
     async function submitPOSAjax(ev){
       ev.preventDefault();
+      // This page owns POS serialization/submission. Prevent the legacy
+      // pos.js submit guard from running afterward and replacing items_json.
+      ev.stopImmediatePropagation();
   
       // Clear any old errors
       if (errorBox) errorBox.classList.add('d-none');
@@ -563,6 +832,14 @@ document.addEventListener('DOMContentLoaded', function(){
       }
   
       try {
+        // If the cashier typed/scanned a product but clicked Complete without
+        // pressing Enter, convert that value into a cart row automatically.
+        if (typeof window.buildItemsJSON === 'function' &&
+            !window.buildItemsJSON().length &&
+            document.getElementById('quick_scan')?.value.trim() &&
+            typeof window.addPOSFromQuickScan === 'function') {
+          window.addPOSFromQuickScan();
+        }
         if (typeof window.removeUnselectedRows === 'function') {
           window.removeUnselectedRows();
         }

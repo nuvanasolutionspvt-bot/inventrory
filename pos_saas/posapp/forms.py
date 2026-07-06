@@ -605,9 +605,11 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
             self.fields['category'].queryset = Category.objects.filter(tenant=self.tenant).order_by('name')
         else:
             self.fields['category'].queryset = Category.objects.none()
-        if not self.is_pharmacy_tenant:
-            for field_name in self.PHARMACY_FIELDS:
-                self.fields.pop(field_name, None)
+        # Product-level batch fields are legacy fields. Pharmacy batch details
+        # are managed through purchases/ProductBatch, while other business
+        # types retain their existing behavior of not exposing these fields.
+        for field_name in self.PHARMACY_FIELDS:
+            self.fields.pop(field_name, None)
 
     @property
     def is_pharmacy_tenant(self):

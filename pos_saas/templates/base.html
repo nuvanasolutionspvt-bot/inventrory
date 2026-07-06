@@ -12,7 +12,7 @@
     <link href="{% static 'vendor/tom-select/tom-select.bootstrap5.min.css' %}" rel="stylesheet">
     <link href="{% static 'select-enhance.css' %}?v=1" rel="stylesheet">
     <!-- App theme -->
-    <link href="{% static 'app.css' %}?v=NS-2025-09-08-1" rel="stylesheet">
+    <link href="{% static 'app.css' %}?v=NS-2026-07-01-1" rel="stylesheet">
   </head>
   <body class="app-body">
     <nav class="navbar navbar-expand-lg app-navbar shadow-sm">
@@ -82,6 +82,9 @@
                 <ul class="dropdown-menu shadow-sm">
                   <li><a class="dropdown-item" href="{% url 'sales_report' %}"><i class="bi bi-receipt me-2"></i>Sales Report</a></li>
                   <li><a class="dropdown-item" href="{% url 'stock_report' %}"><i class="bi bi-box2-heart me-2"></i>Stock Report</a></li>
+                  {% if request.tenant.business_type == 'pharmacy' %}
+                  <li><a class="dropdown-item" href="{% url 'batch_stock_report' %}"><i class="bi bi-boxes me-2"></i>Batch Stock Report</a></li>
+                  {% endif %}
                   <li><a class="dropdown-item" href="{% url 'purchase_report' %}"><i class="bi bi-cart-check me-2"></i>Purchase Report</a></li>
                 </ul>
               </li>
@@ -195,7 +198,7 @@
     </footer>
 
     <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}?v=offline2"></script>
-    <script src="{% static 'pos.js' %}?v=16"></script>
+    <script src="{% static 'pos.js' %}?v=22"></script>
     <script src="{% static 'vendor/tom-select/tom-select.complete.min.js' %}"></script>
     <script src="{% static 'select-enhance.js' %}?v=1"></script>
 

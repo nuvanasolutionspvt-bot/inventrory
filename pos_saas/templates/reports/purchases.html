@@ -9,7 +9,7 @@
 </form>
 <div class="text-end mb-2"><b>Total: ₹ {{ total }}</b></div>
 <table class="table table-sm table-striped">
-  <thead><tr><th>Date</th><th>PO</th><th>Supplier</th><th class="text-end">Total</th><th>Notes</th></tr></thead>
+  <thead><tr><th>Date</th><th>PO</th><th>Supplier</th><th class="text-end">Total</th><th>Notes</th><th></th></tr></thead>
   <tbody>
     {% for p in purchases %}
     <tr>
@@ -18,9 +18,14 @@
       <td>{{ p.supplier }}</td>
       <td class="text-end">{{ p.total }}</td>
       <td>{{ p.notes|default:"" }}</td>
+      <td class="text-end">
+        {% if perms.posapp.can_manage_purchases %}
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'purchase_update' p.id %}">Edit</a>
+        {% endif %}
+      </td>
     </tr>
     {% empty %}
-    <tr><td colspan="5" class="text-muted text-center">No purchases</td></tr>
+    <tr><td colspan="6" class="text-muted text-center">No purchases</td></tr>
     {% endfor %}
   </tbody>
 </table>

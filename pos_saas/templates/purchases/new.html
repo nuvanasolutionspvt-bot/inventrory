@@ -1,16 +1,16 @@
 {% extends 'base.html' %}
 {% load widget_tweaks %}
 {% block title %}New Purchase — Stationery POS{% endblock %}
-{% block breadcrumb %}Purchases / New{% endblock %}
+{% block breadcrumb %}Purchases / {% if editing %}Edit{% else %}New{% endif %}{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-xl-10">
-    <form method="post" class="card shadow-sm">
+    <form method="post" class="card shadow-sm" id="purchase-form">
       {% csrf_token %}
 
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="m-0">New Purchase</h5>
+        <h5 class="m-0">{{ title|default:"New Purchase" }}</h5>
         <!-- Use a history back so no Django URL name is required -->
         <a href="javascript:history.back()" class="btn btn-sm btn-light">Back</a>
       </div>
@@ -40,18 +40,30 @@
 
         <div class="d-flex justify-content-between align-items-center">
           <h6 class="m-0">Items</h6>
-          <button type="button" class="btn btn-outline-primary btn-sm" onclick="addItemRow('purchase')">
+          <button type="button" class="btn btn-outline-primary btn-sm" onclick="{% if is_pharmacy %}addPharmacyPurchaseRow(){% elif is_trade_purchase %}addTradePurchaseRow(){% else %}addItemRow('purchase'){% endif %}">
             <i class="bi bi-plus-circle me-1"></i>Add Item
           </button>
         </div>
 
-        <div class="table-responsive mt-2">
-          <table class="table table-sm align-middle" id="items-table">
+        <div class="table-responsive purchase-items-wrap mt-2" style="display:block; width:100%; max-width:100%; overflow-x:auto; overflow-y:hidden;">
+          <table class="table table-sm align-middle purchase-items-table {% if is_pharmacy %}purchase-pharmacy-table{% endif %}" id="items-table" style="width:{% if is_pharmacy %}1180px{% elif is_trade_purchase %}1050px{% else %}850px{% endif %}; min-width:{% if is_pharmacy %}1180px{% elif is_trade_purchase %}1050px{% else %}850px{% endif %}; max-width:none;">
             <thead>
               <tr>
                 <th>Product</th>
+                {% if is_pharmacy %}
+                  <th>Batch Number</th>
+                  <th>Manufacture Date</th>
+                  <th>Expiry Date</th>
+                {% endif %}
                 <th style="width:120px">Qty</th>
-                <th style="width:150px">Cost</th>
+                <th style="width:150px">{% if is_pharmacy or is_trade_purchase %}Purchase Price{% else %}Cost{% endif %}</th>
+                {% if is_pharmacy %}
+                  <th>Sale Price</th>
+                  <th>MRP</th>
+                {% elif is_trade_purchase %}
+                  <th style="width:150px">Selling Price</th>
+                  <th style="width:140px">Profit / Unit</th>
+                {% endif %}
                 <th style="width:150px">Line Total</th>
                 <th style="width:40px"></th>
               </tr>
@@ -60,7 +72,7 @@
           </table>
         </div>
 
-        <input type="hidden" name="items_json" id="items_json">
+        <input type="hidden" name="items_json" id="items_json" value="{{ items_json|default:'[]'|escape }}">
 
         <div class="text-end mt-3">
           <div class="fw-semibold">Total: <span id="grand_total">0.00</span></div>
@@ -68,7 +80,7 @@
       </div>
 
       <div class="card-footer bg-white">
-        <button class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Save Purchase</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>{% if editing %}Update Purchase{% else %}Save Purchase{% endif %}</button>
       </div>
     </form>
   </div>
@@ -80,7 +92,10 @@
       data-kind="product"
       data-key="product:{{ p.id }}"
       data-id="{{ p.id }}"
+      data-code="{{ p.code }}"
       data-price="{{ p.cost_price }}"
+      data-sale-price="{{ p.unit_price }}"
+      data-mrp="{{ p.unit_price }}"
       data-barcode="{{ p.barcode }}"
       value="{{ p.code }} - {{ p.name }}{% if p.barcode %} ({{ p.barcode }}){% endif %}">
     </option>
@@ -90,10 +105,320 @@
 <script>
   // Treat this page as a purchase screen
   window.ITEMS_KIND = 'purchase';
+  window.PURCHASE_IS_PHARMACY = {% if is_pharmacy %}true{% else %}false{% endif %};
+  window.PURCHASE_SHOW_PRICING = {% if is_trade_purchase %}true{% else %}false{% endif %};
+
+  {% if is_trade_purchase %}
+  (function() {
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, function(ch) {
+        return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
+      });
+    }
+
+    function tradeProductOptions() {
+      var options = ['<option value="">Select product</option>'];
+      document.querySelectorAll('#products option').forEach(function(option) {
+        options.push(
+          '<option value="product:' + escapeHtml(option.dataset.id || '') + '"' +
+          ' data-id="' + escapeHtml(option.dataset.id || '') + '"' +
+          ' data-price="' + escapeHtml(option.dataset.price || '0') + '"' +
+          ' data-sale-price="' + escapeHtml(option.dataset.salePrice || '0') + '">' +
+          escapeHtml(option.value || 'Product') + '</option>'
+        );
+      });
+      return options.join('');
+    }
+
+    function recalculateTradePurchase() {
+      var grandTotal = 0;
+      document.querySelectorAll('#items-table tbody tr').forEach(function(row) {
+        var qty = parseFloat(row.querySelector('.qty-input')?.value || '0') || 0;
+        var purchasePrice = parseFloat(row.querySelector('.price-input')?.value || '0') || 0;
+        var sellingPrice = parseFloat(row.querySelector('.sale-price-input')?.value || '0') || 0;
+        var profit = sellingPrice - purchasePrice;
+        var lineTotal = qty * purchasePrice;
+        var profitCell = row.querySelector('.profit-per-unit');
+        var totalCell = row.querySelector('.line-total');
+        if (profitCell) {
+          profitCell.textContent = profit.toFixed(2);
+          profitCell.classList.toggle('text-success', profit >= 0);
+          profitCell.classList.toggle('text-danger', profit < 0);
+        }
+        if (totalCell) totalCell.textContent = lineTotal.toFixed(2);
+        grandTotal += lineTotal;
+      });
+      var total = document.getElementById('grand_total');
+      if (total) total.textContent = grandTotal.toFixed(2);
+    }
+
+    window.addTradePurchaseRow = function(prefill) {
+      prefill = prefill || {};
+      var tbody = document.querySelector('#items-table tbody');
+      if (!tbody) return;
+      var row = document.createElement('tr');
+      row.dataset.purchaseItemId = prefill.purchase_item_id || '';
+      row.innerHTML = `
+        <td><select class="form-select form-select-sm product-input js-enhance-select" data-placeholder="Select product">${tradeProductOptions()}</select></td>
+        <td><input type="number" min="1" value="1" class="form-control form-control-sm qty-input text-end" aria-label="Quantity"></td>
+        <td><input type="number" step="0.01" min="0" value="0" class="form-control form-control-sm price-input text-end" aria-label="Purchase price"></td>
+        <td><input type="number" step="0.01" min="0" value="0" class="form-control form-control-sm sale-price-input text-end" aria-label="Selling price"></td>
+        <td class="profit-per-unit text-end fw-semibold text-success">0.00</td>
+        <td class="line-total text-end fw-semibold">0.00</td>
+        <td style="width:52px"><button type="button" class="btn btn-sm btn-outline-danger remove-row-btn" aria-label="Remove row">&times;</button></td>`;
+      tbody.appendChild(row);
+
+      var productInput = row.querySelector('.product-input');
+      var qtyInput = row.querySelector('.qty-input');
+      var purchaseInput = row.querySelector('.price-input');
+      var sellingInput = row.querySelector('.sale-price-input');
+
+      productInput.value = prefill.catalog_key || (prefill.product_id ? 'product:' + prefill.product_id : '');
+      qtyInput.value = prefill.qty || 1;
+      purchaseInput.value = prefill.purchase_rate ?? prefill.cost_price ?? prefill.unit_price ?? 0;
+      sellingInput.value = prefill.sale_price ?? 0;
+
+      productInput.addEventListener('change', function() {
+        var option = productInput.selectedOptions[0];
+        if (option) {
+          purchaseInput.value = parseFloat(option.dataset.price || '0').toFixed(2);
+          sellingInput.value = parseFloat(option.dataset.salePrice || '0').toFixed(2);
+        }
+        recalculateTradePurchase();
+      });
+      [qtyInput, purchaseInput, sellingInput].forEach(function(input) {
+        input.addEventListener('input', recalculateTradePurchase);
+      });
+      row.querySelector('.remove-row-btn').addEventListener('click', function() {
+        row.remove();
+        recalculateTradePurchase();
+      });
+      if (typeof window.initTomSelects === 'function') window.initTomSelects(row);
+      recalculateTradePurchase();
+      return row;
+    };
+
+    window.restoreTradePurchaseItems = function(jsonText) {
+      var items = [];
+      try { items = JSON.parse(jsonText || '[]'); } catch (_) { items = []; }
+      if (!items.length) return false;
+      var tbody = document.querySelector('#items-table tbody');
+      if (!tbody) return false;
+      tbody.innerHTML = '';
+      items.forEach(window.addTradePurchaseRow);
+      return true;
+    };
+  })();
+  {% endif %}
+
+  // Keep purchase submission self-contained. This prevents an older cached
+  // POS serializer from dropping pharmacy-only batch fields before POST.
+  function serializePurchaseItems() {
+    var items = [];
+    document.querySelectorAll('#items-table tbody tr').forEach(function(row) {
+      var productInput = row.querySelector('.product-input');
+      var selected = productInput && productInput.selectedOptions
+        ? productInput.selectedOptions[0]
+        : null;
+      var rawValue = productInput
+        ? (productInput.tomselect ? productInput.tomselect.getValue() : productInput.value)
+        : '';
+      var productId = selected && selected.dataset.id
+        ? parseInt(selected.dataset.id, 10)
+        : parseInt(String(rawValue || '').replace(/^product:/, ''), 10);
+      var qty = parseInt(row.querySelector('.qty-input')?.value || '0', 10);
+      var purchaseRate = parseFloat(row.querySelector('.price-input')?.value || '0');
+
+      if (!productId || qty <= 0) return;
+      if (!Number.isFinite(purchaseRate)) purchaseRate = 0;
+
+      var item = {
+        kind: 'product',
+        catalog_key: 'product:' + productId,
+        product_id: productId,
+        purchase_item_id: row.dataset.purchaseItemId || '',
+        product_batch_id: row.dataset.productBatchId || '',
+        qty: qty,
+        unit_price: purchaseRate,
+        cost_price: purchaseRate,
+        purchase_rate: purchaseRate
+      };
+
+      if (window.PURCHASE_IS_PHARMACY) {
+        item.batch_no = row.querySelector('.batch-input')?.value.trim() || '';
+        item.manufacture_date = row.querySelector('.manufacture-date-input')?.value || '';
+        item.expiry_date = row.querySelector('.expiry-date-input')?.value || '';
+        item.sale_price = parseFloat(row.querySelector('.sale-price-input')?.value || '0') || 0;
+        item.mrp = parseFloat(row.querySelector('.mrp-input')?.value || '0') || 0;
+      } else if (window.PURCHASE_SHOW_PRICING) {
+        item.sale_price = parseFloat(row.querySelector('.sale-price-input')?.value || '0') || 0;
+      }
+      items.push(item);
+    });
+
+    var hidden = document.getElementById('items_json');
+    if (hidden) hidden.value = JSON.stringify(items);
+    return items;
+  }
+  window.serializePurchaseItems = serializePurchaseItems;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var form = document.getElementById('purchase-form');
+    if (!form) return;
+    form.addEventListener('submit', function(event) {
+      if (window.PURCHASE_IS_PHARMACY &&
+          typeof validatePharmacyPurchaseRows === 'function' &&
+          !validatePharmacyPurchaseRows()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      var items = serializePurchaseItems();
+      if (!items.length) {
+        event.preventDefault();
+        alert('Add at least one valid item before saving the purchase.');
+      }
+      // Do not allow a stale global submit handler to overwrite items_json.
+      event.stopImmediatePropagation();
+    }, true);
+  });
+
+  {% if is_pharmacy %}
+  (function(){
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, function(ch) {
+        return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
+      });
+    }
+
+    function productOptions() {
+      var options = ['<option value="">Select product</option>'];
+      document.querySelectorAll('#products option').forEach(function(opt) {
+        var key = opt.dataset.key || ('product:' + (opt.dataset.id || ''));
+        options.push(
+          '<option value="' + esc(key) + '" data-key="' + esc(key) + '" data-id="' + esc(opt.dataset.id || '') + '" data-kind="product" data-code="' + esc(opt.dataset.code || '') + '" data-barcode="' + esc(opt.dataset.barcode || '') + '">' +
+          esc(opt.value || 'Product') +
+          '</option>'
+        );
+      });
+      return options.join('');
+    }
+
+    window.addPharmacyPurchaseRow = function(prefill) {
+      prefill = prefill || {};
+      var tbody = document.querySelector('#items-table tbody');
+      if (!tbody) return;
+      var tr = document.createElement('tr');
+      tr.className = 'purchase-pharmacy-row';
+      tr.dataset.purchaseItemId = prefill.purchase_item_id || '';
+      tr.dataset.productBatchId = prefill.product_batch_id || '';
+      tr.innerHTML = `
+        <td class="purchase-field purchase-field-product">
+          <select class="form-select form-select-sm product-input js-enhance-select" data-placeholder="Select product" aria-label="Product">${productOptions()}</select>
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-batch">
+          <input type="text" class="form-control form-control-sm batch-input" placeholder="Batch number" aria-label="Batch number">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-date">
+          <input type="date" class="form-control form-control-sm manufacture-date-input" aria-label="Manufacture date">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-date">
+          <input type="date" class="form-control form-control-sm expiry-date-input" aria-label="Expiry date">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-qty">
+          <input type="number" min="1" value="1" class="form-control form-control-sm qty-input text-end" placeholder="Qty" aria-label="Quantity">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-money">
+          <input type="number" step="0.01" min="0" class="form-control form-control-sm price-input text-end" placeholder="0.00" aria-label="Purchase rate">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-money">
+          <input type="number" step="0.01" min="0" class="form-control form-control-sm sale-price-input text-end" placeholder="0.00" aria-label="Sale price">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-money">
+          <input type="number" step="0.01" min="0" class="form-control form-control-sm mrp-input text-end" placeholder="0.00" aria-label="MRP">
+          <div class="invalid-feedback"></div>
+        </td>
+        <td class="purchase-field purchase-field-total">
+          <div class="line-total text-end fw-semibold">0.00</div>
+        </td>
+        <td class="purchase-field purchase-field-remove">
+          <button type="button" class="btn btn-sm btn-outline-danger remove-row-btn" title="Remove" aria-label="Remove row">&times;</button>
+        </td>`;
+      tbody.appendChild(tr);
+
+      var productInput = tr.querySelector('.product-input');
+      var qtyInput = tr.querySelector('.qty-input');
+      var priceInput = tr.querySelector('.price-input');
+      var batchInput = tr.querySelector('.batch-input');
+      var manufactureInput = tr.querySelector('.manufacture-date-input');
+      var expiryInput = tr.querySelector('.expiry-date-input');
+      var salePriceInput = tr.querySelector('.sale-price-input');
+      var mrpInput = tr.querySelector('.mrp-input');
+
+      productInput.value = prefill.catalog_key || (prefill.product_id ? 'product:' + prefill.product_id : '');
+      qtyInput.value = prefill.qty || 1;
+      priceInput.value = prefill.purchase_rate || prefill.cost_price || prefill.unit_price || '';
+      batchInput.value = prefill.batch_no || '';
+      manufactureInput.value = prefill.manufacture_date || '';
+      expiryInput.value = prefill.expiry_date || '';
+      salePriceInput.value = prefill.sale_price || '';
+      mrpInput.value = prefill.mrp || '';
+
+      [productInput, qtyInput, priceInput, batchInput, manufactureInput, expiryInput, salePriceInput, mrpInput].forEach(function(input) {
+        input.addEventListener('input', function() {
+          if (typeof validatePharmacyPurchaseRow === 'function') validatePharmacyPurchaseRow(tr);
+          if (typeof recalcTotals === 'function') recalcTotals();
+        });
+        input.addEventListener('change', function() {
+          if (typeof validatePharmacyPurchaseRow === 'function') validatePharmacyPurchaseRow(tr);
+          if (typeof recalcTotals === 'function') recalcTotals();
+        });
+      });
+      tr.querySelector('.remove-row-btn').addEventListener('click', function() {
+        tr.remove();
+        if (typeof recalcTotals === 'function') recalcTotals();
+      });
+      if (typeof window.initTomSelects === 'function') window.initTomSelects(tr);
+      if (typeof recalcTotals === 'function') recalcTotals();
+      return tr;
+    };
+
+    window.restorePharmacyPurchaseItems = function(jsonText) {
+      var rows = [];
+      try { rows = JSON.parse(jsonText || '[]'); } catch(e) { rows = []; }
+      var tbody = document.querySelector('#items-table tbody');
+      if (!tbody || !rows.length) return false;
+      tbody.innerHTML = '';
+      rows.forEach(function(row) { window.addPharmacyPurchaseRow(row); });
+      return true;
+    };
+  })();
+  {% endif %}
   document.addEventListener('DOMContentLoaded', function () {
+    {% if is_pharmacy %}
+    var hidden = document.getElementById('items_json');
+    var restored = hidden && hidden.value && hidden.value.trim().length > 2 && window.restorePharmacyPurchaseItems(hidden.value);
+    if (!restored && !document.querySelector('#items-table tbody tr')) {
+      addPharmacyPurchaseRow();
+    }
+    {% elif is_trade_purchase %}
+    var tradeHidden = document.getElementById('items_json');
+    var tradeRestored = tradeHidden && tradeHidden.value && tradeHidden.value.trim().length > 2 && window.restoreTradePurchaseItems(tradeHidden.value);
+    if (!tradeRestored && !document.querySelector('#items-table tbody tr')) {
+      addTradePurchaseRow();
+    }
+    {% else %}
     if (!document.querySelector('#items-table tbody tr')) {
       addItemRow('purchase');
     }
+    {% endif %}
   });
 </script>
 {% endblock %}

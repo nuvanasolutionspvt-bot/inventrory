@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Category, Product, ProductSet, ProductSetItem, Supplier, Customer, Purchase,
+    Category, Product, ProductBatch, ProductSet, ProductSetItem, Supplier, Customer, Purchase,
     PurchaseItem, Sale, SaleItem, StockMove, Tenant, TenantMembership,
     SiteSetting, CustomerLedger, SubscriptionPlan, TenantSubscription,
     SubscriptionPaymentOrder
@@ -63,6 +63,15 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = ['code','barcode','name','tenant','batch_no','manufacture_date','expiry_date','category','unit_price','cost_price','tax_percent','stock','is_active']
     list_filter = ['tenant','category','is_active']
     search_fields = ['code','barcode','name','batch_no','tenant__name','tenant__slug']
+
+
+@admin.register(ProductBatch)
+class ProductBatchAdmin(admin.ModelAdmin):
+    list_display = ['product', 'batch_no', 'available_qty', 'expiry_date', 'supplier', 'status']
+    list_filter = ['expiry_date', 'supplier', 'status']
+    search_fields = ['product__code', 'product__name', 'batch_no']
+    raw_id_fields = ['tenant', 'product', 'supplier']
+
 
 class ProductSetItemInline(admin.TabularInline):
     model = ProductSetItem

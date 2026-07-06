@@ -38,6 +38,7 @@ urlpatterns = [
 
     # Purchases
     path('purchases/new/', views.purchase_create, name='purchase_create'),
+    path('purchases/<int:purchase_id>/edit/', views.purchase_update, name='purchase_update'),
 
     # Sales (POS)
     path('pos/', views.pos_sale_create, name='pos_sale_create'),
@@ -46,6 +47,7 @@ urlpatterns = [
     # Reports
     path('reports/sales/', views.sales_report, name='sales_report'),
     path('reports/stock/', views.stock_report, name='stock_report'),
+    path('reports/batch-stock/', views.batch_stock_report, name='batch_stock_report'),
     path('reports/purchases/', views.purchase_report, name='purchase_report'),
 
     path('stock/bulk_adjust/', views.stock_bulk_adjust, name='stock_bulk_adjust'),

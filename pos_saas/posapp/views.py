@@ -3,17 +3,18 @@ from decimal import Decimal
 import base64
 import hashlib
 import hmac
+import logging
 import urllib.error
 import urllib.request
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
 from django.conf import settings
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import (
-    Sum, F, DecimalField, ExpressionWrapper, Q, Value, Subquery, OuterRef, Count,Case, When
+    Sum, F, DecimalField, ExpressionWrapper, Q, Value, Subquery, OuterRef, Count, Case, When, CharField
 
 )
 from django.db.models.functions import Coalesce, Cast
@@ -31,13 +32,15 @@ from .forms import (
     ReceivePaymentForm, CustomerChargeForm, CustomerStatementFilterForm,
 )
 from .models import (
-    Product, ProductSet, ProductSetItem, SiteSetting, Supplier, Customer, Purchase, PurchaseItem,
+    Product, ProductBatch, ProductSet, ProductSetItem, SiteSetting, Supplier, Customer, Purchase, PurchaseItem,
     Sale, SaleItem, StockMove, Category, CustomerLedger, TenantMembership,
     SubscriptionPlan, TenantSubscription, SubscriptionPaymentOrder, Tenant
 )
 from .tenancy import SESSION_TENANT_KEY, require_active_tenant
 import csv, io, json
 from django.contrib.auth.models import User, Group, Permission
+
+logger = logging.getLogger(__name__)
 
 # PDF / Barcode libs
 from reportlab.pdfgen import canvas
@@ -211,19 +214,37 @@ def _pos_catalog(tenant):
     stock_map = _product_stock_map(tenant)
     for product_set in sets:
         product_set.stock_sum = _set_available_stock(product_set, tenant, stock_map)
-    return products, sets
+    batches = []
+    if tenant.business_type == 'pharmacy':
+        # Include depleted/expired batches so a return can target its original
+        # batch. Normal-sale validation still blocks either condition.
+        batches = list(
+            ProductBatch.objects
+            .filter(tenant=tenant, received_qty__gt=0, product__is_active=True)
+            .select_related('product')
+            .order_by('product__code', 'expiry_date', 'batch_no')
+        )
+        batches.sort(key=lambda batch: (
+            batch.product.code,
+            0 if batch.stock_available() else 1,
+            batch.expiry_date,
+            batch.batch_no,
+        ))
+    return products, sets, batches
 
 
 def _line_from_pos_item(item, tenant):
     catalog_key = (item.get('catalog_key') or '').strip()
     if ':' in catalog_key:
         key_kind, key_id = catalog_key.split(':', 1)
-        if key_kind in ('product', 'set') and key_id:
+        if key_kind in ('product', 'set', 'batch') and key_id:
             item = dict(item)
             item['kind'] = key_kind
             if key_kind == 'set':
                 item['set_id'] = key_id
                 item.pop('product_id', None)
+            elif key_kind == 'batch':
+                item['batch_id'] = key_id
             else:
                 item['product_id'] = key_id
                 item.pop('set_id', None)
@@ -231,6 +252,32 @@ def _line_from_pos_item(item, tenant):
     kind = item.get('kind') or item.get('type') or ('set' if item.get('set_id') else 'product')
     qty = int(item.get('qty') or 0)
     unit_price = Decimal(str(item.get('unit_price') or item.get('price') or 0))
+    if qty <= 0:
+        raise ValidationError('Quantity must be greater than zero.')
+
+    if kind == 'batch':
+        batch = get_object_or_404(
+            ProductBatch.objects.select_related('product'),
+            tenant=tenant,
+            pk=item.get('batch_id'),
+        )
+        # Pharmacy selling price is owned by the selected batch. Never trust a
+        # browser-submitted price for a batch sale.
+        unit_price = batch.sale_price
+        product = batch.product
+        return {
+            'kind': 'batch',
+            'product': product,
+            'product_batch': batch,
+            'product_set': None,
+            'qty': qty,
+            'unit_price': unit_price,
+            'tax_percent': product.tax_percent or 0,
+            'description': f"{product.code} - {product.name}",
+            'details': f"Batch: {batch.batch_no} | Exp: {batch.expiry_date.isoformat()}",
+            'components': None,
+            'source_label': f"batch {batch.batch_no} of {product.code} - {product.name}",
+        }
 
     # Legacy/stale POS JavaScript can submit a set row as product_id=<same id>.
     # If the id and price clearly point to a ProductSet, bill it as the set.
@@ -254,6 +301,7 @@ def _line_from_pos_item(item, tenant):
         return {
             'kind': 'set',
             'product': None,
+            'product_batch': None,
             'product_set': product_set,
             'qty': qty,
             'unit_price': unit_price,
@@ -268,9 +316,12 @@ def _line_from_pos_item(item, tenant):
         }
 
     product = get_object_or_404(Product, tenant=tenant, pk=item.get('product_id'))
+    if tenant.business_type == 'pharmacy':
+        raise ValidationError(f'Select a batch for {product.code} - {product.name}.')
     return {
         'kind': 'product',
         'product': product,
+        'product_batch': None,
         'product_set': None,
         'qty': qty,
         'unit_price': unit_price,
@@ -302,6 +353,89 @@ def _required_stock_for_lines(lines):
     return required, labels
 
 
+def _lock_and_validate_pharmacy_batches(lines, tenant, is_return, replacing_sale=None):
+    """Lock selected batches and validate inventory before posting a sale."""
+    if tenant.business_type != 'pharmacy':
+        return
+    if any(line['kind'] != 'batch' for line in lines):
+        raise ValidationError('Pharmacy POS items must use a purchased product batch.')
+
+    required = {}
+    for line in lines:
+        batch_id = line['product_batch'].id
+        required[batch_id] = required.get(batch_id, 0) + int(line['qty'])
+
+    previous_effects = {}
+    previous_batch_ids = set()
+    if replacing_sale is not None:
+        for item in SaleItem.objects.filter(
+            sale=replacing_sale,
+            product_batch__isnull=False,
+        ):
+            previous_batch_ids.add(item.product_batch_id)
+            # Effective availability after undoing the old document.
+            undo_change = int(item.qty or 0)
+            previous_effects[item.product_batch_id] = (
+                previous_effects.get(item.product_batch_id, 0) + undo_change
+            )
+
+    locked = {
+        batch.id: batch
+        for batch in ProductBatch.objects.select_for_update().select_related('product').filter(
+            tenant=tenant,
+            id__in=set(required) | previous_batch_ids,
+        )
+    }
+    if any(batch_id not in locked for batch_id in required):
+        raise ValidationError('One or more selected batches are no longer available.')
+
+    errors = []
+    for batch_id, qty in required.items():
+        batch = locked[batch_id]
+        effective_available = batch.available_qty + previous_effects.get(batch_id, 0)
+        if is_return:
+            if effective_available + qty > batch.received_qty:
+                errors.append(
+                    f'{batch}: return quantity exceeds quantity previously sold from this batch.'
+                )
+        else:
+            if batch.is_expired():
+                errors.append(f'{batch}: batch expired on {batch.expiry_date}.')
+            elif qty > effective_available:
+                errors.append(
+                    f'{batch}: requested {qty}, batch stock {effective_available}.'
+                )
+    if errors:
+        raise ValidationError(errors)
+
+    for line in lines:
+        batch = locked[line['product_batch'].id]
+        line['product_batch'] = batch
+        line['product'] = batch.product
+        line['unit_price'] = batch.sale_price
+
+
+def _reverse_sale_batch_inventory(sale):
+    """Undo batch quantities posted by an existing sale before rebuilding it."""
+    items = list(
+        SaleItem.objects.filter(sale=sale, product_batch__isnull=False)
+        .select_related('product_batch')
+    )
+    if not items:
+        return
+    batches = {
+        batch.id: batch
+        for batch in ProductBatch.objects.select_for_update().filter(
+            tenant=sale.tenant,
+            id__in={item.product_batch_id for item in items},
+        )
+    }
+    for item in items:
+        batch = batches[item.product_batch_id]
+        batch.available_qty += int(item.qty or 0)
+        batch.save(update_fields=['available_qty', 'status', 'updated_at'])
+
+
 def _create_sale_line_and_stock(sale, line, sign):
     qty = int(line['qty'])
     unit_price = line['unit_price']
@@ -312,6 +446,7 @@ def _create_sale_line_and_stock(sale, line, sign):
     SaleItem.objects.create(
         sale=sale,
         product=line['product'],
+        product_batch=line.get('product_batch'),
         product_set=line['product_set'],
         description=line['description'],
         details=line.get('details', ''),
@@ -325,6 +460,10 @@ def _create_sale_line_and_stock(sale, line, sign):
     ref = f"{'CRN' if sale.is_return else 'INV'}-{sale.id}"
     reason = 'return' if sale.is_return else 'sale'
     stock_sign = 1 if sale.is_return else -1
+    if line['kind'] == 'batch':
+        batch = line['product_batch']
+        batch.available_qty += stock_sign * qty
+        batch.save(update_fields=['available_qty', 'status', 'updated_at'])
     if line['kind'] == 'set':
         for component in line['components']:
             StockMove.objects.create(
@@ -574,6 +713,37 @@ def dashboard(request):
     tenant = _tenant(request)
     today = date.today()
 
+    expiry_kpis = None
+    if tenant.business_type == 'pharmacy':
+        day_30 = today + timedelta(days=30)
+        day_60 = today + timedelta(days=60)
+        day_90 = today + timedelta(days=90)
+        batch_value = ExpressionWrapper(
+            F('available_qty') * F('purchase_rate'),
+            output_field=DecimalField(max_digits=18, decimal_places=2),
+        )
+        available_batches = ProductBatch.objects.filter(tenant=tenant, available_qty__gt=0)
+        expiry_kpis = available_batches.aggregate(
+            expired_count=Count('id', filter=Q(expiry_date__lt=today)),
+            days_30_count=Count('id', filter=Q(expiry_date__gte=today, expiry_date__lte=day_30)),
+            days_60_count=Count('id', filter=Q(expiry_date__gt=day_30, expiry_date__lte=day_60)),
+            days_90_count=Count('id', filter=Q(expiry_date__gt=day_60, expiry_date__lte=day_90)),
+            expired_value=Coalesce(
+                Sum(batch_value, filter=Q(expiry_date__lt=today)),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            ),
+            near_expiry_value=Coalesce(
+                Sum(batch_value, filter=Q(expiry_date__gte=today, expiry_date__lte=day_90)),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            ),
+        )
+        expiry_kpis['alert_count'] = (
+            expiry_kpis['expired_count'] + expiry_kpis['days_30_count'] +
+            expiry_kpis['days_60_count'] + expiry_kpis['days_90_count']
+        )
+
     # ===== Basic KPIs =====
     total_sales_today = (
         Sale.objects.filter(tenant=tenant, date=today)
@@ -685,6 +855,7 @@ def dashboard(request):
         # Credit
         'credit_kpis': credit_kpis,
         'top_debtors': top_debtors,
+        'expiry_kpis': expiry_kpis,
     })
 
 # --------------------------
@@ -717,7 +888,12 @@ def _pager_ctx(request, queryset, default_size=25):
 def product_list(request):
     tenant = _tenant(request)
     q = (request.GET.get('q') or '').strip()
-    products = Product.objects.filter(tenant=tenant).select_related('category').order_by('code')
+    products = Product.objects.filter(tenant=tenant).select_related('category')
+    if tenant.business_type == 'pharmacy':
+        products = products.annotate(stock_sum=Coalesce(Sum('batches__available_qty'), 0))
+    else:
+        products = products.annotate(stock_sum=Coalesce(Sum('stockmove__change'), 0))
+    products = products.order_by('code')
     if q:
         products = products.filter(
             Q(name__icontains=q) | Q(code__icontains=q) | Q(barcode__icontains=q)
@@ -858,23 +1034,14 @@ def _product_set_save(request, product_set=None):
 @login_required
 def product_export(request):
     tenant = _tenant(request)
-    is_pharmacy = tenant.business_type == 'pharmacy'
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="products.csv"'
     writer = csv.writer(response)
     headers = ['code', 'barcode', 'name']
-    if is_pharmacy:
-        headers.extend(['batch_no', 'manufacture_date', 'expiry_date'])
     headers.extend(['category', 'unit_price', 'cost_price', 'tax_percent', 'reorder_level', 'is_active'])
     writer.writerow(headers)
     for p in Product.objects.filter(tenant=tenant).select_related('category').order_by('code'):
         row = [p.code or '', p.barcode or '', p.name]
-        if is_pharmacy:
-            row.extend([
-                p.batch_no or '',
-                p.manufacture_date.isoformat() if p.manufacture_date else '',
-                p.expiry_date.isoformat() if p.expiry_date else '',
-            ])
         row.extend([
             (p.category.name if p.category else ''),
             p.unit_price, p.cost_price, p.tax_percent, p.reorder_level, int(p.is_active)
@@ -886,7 +1053,6 @@ def product_export(request):
 @login_required
 def product_import(request):
     tenant = _tenant(request)
-    is_pharmacy = tenant.business_type == 'pharmacy'
     if request.method != 'POST' or 'file' not in request.FILES:
         messages.error(request, 'Upload a CSV file.')
         return redirect('product_list')
@@ -899,14 +1065,6 @@ def product_import(request):
             continue
         barcode = (row.get('barcode') or '').strip() or None
         name = (row.get('name') or '').strip()
-        if is_pharmacy:
-            batch_no = (row.get('batch_no') or '').strip()
-            manufacture_date = date.fromisoformat((row.get('manufacture_date') or '').strip()) if (row.get('manufacture_date') or '').strip() else date.today()
-            expiry_date = date.fromisoformat((row.get('expiry_date') or '').strip()) if (row.get('expiry_date') or '').strip() else None
-        else:
-            batch_no = ''
-            manufacture_date = date.today()
-            expiry_date = None
         cat_name = (row.get('category') or '').strip() or None
         unit_price = Decimal(row.get('unit_price') or '0')
         cost_price = Decimal(row.get('cost_price') or '0')
@@ -920,8 +1078,7 @@ def product_import(request):
             tenant=tenant,
             code=code,
             defaults={
-                'barcode': barcode, 'name': name, 'batch_no': batch_no,
-                'manufacture_date': manufacture_date, 'expiry_date': expiry_date,
+                'barcode': barcode, 'name': name,
                 'category': category,
                 'unit_price': unit_price, 'cost_price': cost_price,
                 'tax_percent': tax_percent, 'reorder_level': reorder_level,
@@ -1044,6 +1201,9 @@ def customer_quick_create(request):
 @permission_required('posapp.can_adjust_stock', raise_exception=True)
 def product_add_stock(request, pk=None):
     tenant = _tenant(request)
+    if tenant.business_type == 'pharmacy':
+        messages.info(request, 'Pharmacy stock must be received through a purchase batch.')
+        return redirect('purchase_create')
     product = None
     if pk:
         product = get_object_or_404(Product, tenant=tenant, pk=pk)
@@ -1066,46 +1226,383 @@ def product_add_stock(request, pk=None):
 
 # -------- Purchases --------
 
+def _validation_messages(exc):
+    if hasattr(exc, 'message_dict'):
+        messages_out = []
+        for field_errors in exc.message_dict.values():
+            messages_out.extend(str(err) for err in field_errors)
+        return messages_out
+    if hasattr(exc, 'messages'):
+        return [str(msg) for msg in exc.messages]
+    return [str(exc)]
+
+
+def _purchase_decimal(value, field_label, row_no, errors):
+    try:
+        amount = Decimal(str(value if value not in (None, '') else '0'))
+    except Exception:
+        errors.append(f"Row {row_no}: {field_label} must be a valid number.")
+        return Decimal('0.00')
+    if amount < 0:
+        errors.append(f"Row {row_no}: {field_label} cannot be negative.")
+    return amount
+
+
+def _purchase_date(value, field_label, row_no, errors):
+    raw = (value or '').strip()
+    if not raw:
+        errors.append(f"Row {row_no}: {field_label} is required.")
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        errors.append(f"Row {row_no}: {field_label} must be a valid date.")
+        return None
+
+
+def _clean_purchase_items(tenant, raw_items, purchase=None):
+    errors = []
+    is_pharmacy = tenant.business_type == 'pharmacy'
+    is_trade_purchase = tenant.business_type in ('retail_store', 'wholesale')
+    clean_items = []
+
+    product_ids = set()
+    for item in raw_items:
+        try:
+            product_ids.add(int(item.get('product_id') or 0))
+        except Exception:
+            continue
+    products = {
+        product.id: product
+        for product in Product.objects.filter(tenant=tenant, is_active=True, id__in=product_ids)
+    }
+
+    seen_batches = set()
+    for idx, item in enumerate(raw_items, start=1):
+        try:
+            product_id = int(item.get('product_id') or 0)
+        except Exception:
+            product_id = 0
+        product = products.get(product_id)
+        if not product:
+            errors.append(f"Row {idx}: Select a valid product.")
+            continue
+
+        try:
+            qty = int(item.get('qty') or 0)
+        except Exception:
+            qty = 0
+        if qty <= 0:
+            errors.append(f"Row {idx}: Quantity must be greater than 0.")
+
+        purchase_rate = _purchase_decimal(
+            item.get('purchase_rate', item.get('cost_price', item.get('unit_price', 0))),
+            'Purchase rate',
+            idx,
+            errors,
+        )
+        line = {
+            'purchase_item_id': item.get('purchase_item_id') or None,
+            'product_batch_id': item.get('product_batch_id') or None,
+            'product': product,
+            'qty': qty,
+            'purchase_rate': purchase_rate,
+            'line_total': purchase_rate * qty if qty > 0 else Decimal('0.00'),
+        }
+
+        if is_trade_purchase:
+            line['sale_price'] = _purchase_decimal(
+                item.get('sale_price', product.unit_price),
+                'Selling price',
+                idx,
+                errors,
+            )
+
+        if is_pharmacy:
+            batch_no = (item.get('batch_no') or '').strip()
+            if not batch_no:
+                errors.append(f"Row {idx}: Batch number is required.")
+
+            manufacture_date = _purchase_date(item.get('manufacture_date'), 'Manufacture date', idx, errors)
+            expiry_date = _purchase_date(item.get('expiry_date'), 'Expiry date', idx, errors)
+            if manufacture_date and expiry_date and expiry_date <= manufacture_date:
+                errors.append(f"Row {idx}: Expiry date must be after manufacture date.")
+
+            mrp = _purchase_decimal(item.get('mrp', 0), 'MRP', idx, errors)
+            sale_price = _purchase_decimal(item.get('sale_price', 0), 'Sale price', idx, errors)
+
+            batch_key = (product.id, batch_no.lower())
+            if batch_no and batch_key in seen_batches:
+                errors.append(f"Row {idx}: Duplicate batch number '{batch_no}' for {product.code}.")
+            seen_batches.add(batch_key)
+
+            product_batch_id = None
+            if line['product_batch_id']:
+                try:
+                    product_batch_id = int(line['product_batch_id'])
+                except Exception:
+                    errors.append(f"Row {idx}: Invalid batch reference.")
+                if product_batch_id and not purchase:
+                    errors.append(f"Row {idx}: Batch reference is not valid for a new purchase.")
+                if product_batch_id and purchase and not PurchaseItem.objects.filter(
+                    purchase=purchase,
+                    product_batch_id=product_batch_id,
+                ).exists():
+                    errors.append(f"Row {idx}: Batch reference does not belong to this purchase.")
+            duplicate_qs = ProductBatch.objects.filter(
+                tenant=tenant,
+                product=product,
+                batch_no__iexact=batch_no,
+            )
+            if product_batch_id:
+                duplicate_qs = duplicate_qs.exclude(pk=product_batch_id)
+            if batch_no and duplicate_qs.exists():
+                errors.append(f"Row {idx}: Batch number '{batch_no}' already exists for {product.code}.")
+
+            line.update({
+                'product_batch_id': product_batch_id,
+                'batch_no': batch_no,
+                'manufacture_date': manufacture_date,
+                'expiry_date': expiry_date,
+                'mrp': mrp,
+                'sale_price': sale_price,
+            })
+
+        clean_items.append(line)
+
+    if not clean_items:
+        errors.append('Please add at least one item.')
+    return clean_items, errors
+
+
+def _batch_consumed_qty(batch):
+    return max(int(batch.received_qty or 0) - int(batch.available_qty or 0), 0)
+
+
+def _validate_removed_purchase_batches(purchase, clean_items):
+    if not purchase:
+        return
+    kept_batch_ids = {
+        item['product_batch_id']
+        for item in clean_items
+        if item.get('product_batch_id')
+    }
+    removed_batches = (
+        ProductBatch.objects
+        .filter(purchase_items__purchase=purchase)
+        .exclude(pk__in=kept_batch_ids)
+        .distinct()
+    )
+    blocked = []
+    for batch in removed_batches:
+        if _batch_consumed_qty(batch) > 0:
+            blocked.append(str(batch))
+    if blocked:
+        # TODO: replace this with true batch-sale allocation checks when sales batches exist.
+        raise ValidationError(
+            'Cannot remove purchase batch lines that have already been partially consumed: '
+            + ', '.join(blocked)
+        )
+
+
+def _sync_purchase_items_and_batches(purchase, clean_items, is_pharmacy):
+    tenant = purchase.tenant
+    is_trade_purchase = tenant.business_type in ('retail_store', 'wholesale')
+    ref = f"PO-{purchase.id}"
+    old_batch_ids = set(
+        PurchaseItem.objects
+        .filter(purchase=purchase, product_batch__isnull=False)
+        .values_list('product_batch_id', flat=True)
+    )
+    kept_batch_ids = set()
+
+    StockMove.objects.filter(tenant=tenant, reason='purchase', ref=ref).delete()
+    PurchaseItem.objects.filter(purchase=purchase).delete()
+
+    purchase_total = Decimal('0.00')
+    for item in clean_items:
+        product = item['product']
+        qty = item['qty']
+        purchase_rate = item['purchase_rate']
+        line_total = item['line_total']
+        product_batch = None
+
+        if is_pharmacy:
+            if item.get('product_batch_id'):
+                product_batch = ProductBatch.objects.select_for_update().get(
+                    tenant=tenant,
+                    pk=item['product_batch_id'],
+                )
+                consumed_qty = _batch_consumed_qty(product_batch)
+                if qty < consumed_qty:
+                    # TODO: enforce with actual batch-wise sales once POS batch allocation exists.
+                    raise ValidationError(
+                        f"Cannot reduce {product_batch} below already consumed quantity {consumed_qty}."
+                    )
+                product_batch.product = product
+                product_batch.supplier = purchase.supplier
+                product_batch.batch_no = item['batch_no']
+                product_batch.manufacture_date = item['manufacture_date']
+                product_batch.expiry_date = item['expiry_date']
+                product_batch.purchase_rate = purchase_rate
+                product_batch.sale_price = item['sale_price']
+                product_batch.mrp = item['mrp']
+                product_batch.received_qty = qty
+                product_batch.available_qty = qty - consumed_qty
+                product_batch.save()
+                logger.info('ProductBatch Updated: %s from %s', product_batch, ref)
+            else:
+                product_batch = ProductBatch.objects.create(
+                    tenant=tenant,
+                    product=product,
+                    supplier=purchase.supplier,
+                    batch_no=item['batch_no'],
+                    manufacture_date=item['manufacture_date'],
+                    expiry_date=item['expiry_date'],
+                    purchase_rate=purchase_rate,
+                    sale_price=item['sale_price'],
+                    mrp=item['mrp'],
+                    received_qty=qty,
+                    available_qty=qty,
+                )
+                logger.info('ProductBatch Created: %s from %s', product_batch, ref)
+            kept_batch_ids.add(product_batch.id)
+
+        PurchaseItem.objects.create(
+            purchase=purchase,
+            product=product,
+            product_batch=product_batch,
+            qty=qty,
+            cost_price=purchase_rate,
+            line_total=line_total,
+        )
+        if is_trade_purchase:
+            product.cost_price = purchase_rate
+            product.unit_price = item['sale_price']
+            product.save(update_fields=['cost_price', 'unit_price', 'updated_at'])
+        StockMove.objects.create(
+            tenant=tenant,
+            product=product,
+            change=qty,
+            reason='purchase',
+            ref=ref,
+        )
+        purchase_total += line_total
+
+    if is_pharmacy:
+        for product_batch in ProductBatch.objects.select_for_update().filter(pk__in=old_batch_ids - kept_batch_ids):
+            consumed_qty = _batch_consumed_qty(product_batch)
+            if consumed_qty > 0:
+                # TODO: replace with batch-wise sale checks after POS batch allocation is implemented.
+                raise ValidationError(f"Cannot remove {product_batch}; it has already been partially consumed.")
+            product_batch.received_qty = 0
+            product_batch.available_qty = 0
+            product_batch.save(update_fields=['received_qty', 'available_qty', 'status', 'updated_at'])
+            logger.info('ProductBatch Updated: %s removed from %s', product_batch, ref)
+
+    purchase.total = purchase_total
+    purchase.save(update_fields=['total', 'updated_at'])
+
+
+def _purchase_initial_items(purchase):
+    if not purchase:
+        return '[]'
+    items = []
+    for item in (
+        PurchaseItem.objects
+        .filter(purchase=purchase)
+        .select_related('product', 'product_batch')
+        .order_by('id')
+    ):
+        batch = item.product_batch
+        row = {
+            'purchase_item_id': item.id,
+            'product_batch_id': batch.id if batch else None,
+            'kind': 'product',
+            'catalog_key': f'product:{item.product_id}',
+            'product_id': item.product_id,
+            'qty': item.qty,
+            'unit_price': str(item.cost_price),
+            'cost_price': str(item.cost_price),
+            'purchase_rate': str(item.cost_price),
+            'sale_price': str(item.product.unit_price),
+        }
+        if batch:
+            row.update({
+                'batch_no': batch.batch_no,
+                'manufacture_date': batch.manufacture_date.isoformat() if batch.manufacture_date else '',
+                'expiry_date': batch.expiry_date.isoformat() if batch.expiry_date else '',
+                'sale_price': str(batch.sale_price),
+                'mrp': str(batch.mrp),
+            })
+        items.append(row)
+    return json.dumps(items)
+
+
+def _purchase_save(request, purchase=None):
+    tenant = _tenant(request)
+    is_pharmacy = tenant.business_type == 'pharmacy'
+    is_trade_purchase = tenant.business_type in ('retail_store', 'wholesale')
+    products = Product.objects.filter(tenant=tenant, is_active=True).order_by('code')
+    editing = purchase is not None
+    title = 'Edit Purchase' if editing else 'New Purchase'
+    items_json = _purchase_initial_items(purchase)
+
+    if request.method == 'POST':
+        form = PurchaseForm(request.POST, instance=purchase, tenant=tenant)
+        items_json = request.POST.get('items_json', '[]')
+        try:
+            raw_items = json.loads(items_json)
+        except Exception:
+            raw_items = []
+        clean_items, item_errors = _clean_purchase_items(tenant, raw_items, purchase=purchase)
+        if form.is_valid() and not item_errors:
+            try:
+                _validate_removed_purchase_batches(purchase, clean_items)
+                with transaction.atomic():
+                    purchase_obj = form.save(commit=False)
+                    purchase_obj.tenant = tenant
+                    purchase_obj.save()
+                    _sync_purchase_items_and_batches(purchase_obj, clean_items, is_pharmacy)
+                logger.info('Purchase %s: PO-%s', 'Updated' if editing else 'Created', purchase_obj.id)
+                messages.success(request, f"Purchase PO-{purchase_obj.id} {'updated' if editing else 'saved'}.")
+                return redirect('purchase_report' if editing else 'purchase_create')
+            except ValidationError as exc:
+                for msg in _validation_messages(exc):
+                    messages.error(request, msg)
+        else:
+            for error in item_errors:
+                messages.error(request, error)
+            if not form.is_valid():
+                messages.error(request, 'Please correct the purchase header details.')
+    else:
+        initial = None if editing else {'date': date.today()}
+        form = PurchaseForm(instance=purchase, initial=initial, tenant=tenant)
+
+    return render(request, 'purchases/new.html', {
+        'form': form,
+        'products': products,
+        'is_pharmacy': is_pharmacy,
+        'is_trade_purchase': is_trade_purchase,
+        'items_json': items_json,
+        'editing': editing,
+        'purchase': purchase,
+        'title': title,
+    })
+
+
 @login_required
 @permission_required('posapp.can_manage_purchases', raise_exception=True)
-@transaction.atomic
 def purchase_create(request):
+    return _purchase_save(request)
+
+
+@login_required
+@permission_required('posapp.can_manage_purchases', raise_exception=True)
+def purchase_update(request, purchase_id):
     tenant = _tenant(request)
-    products = Product.objects.filter(tenant=tenant, is_active=True)
-    if request.method == 'POST':
-        form = PurchaseForm(request.POST, tenant=tenant)
-        items_json = request.POST.get('items_json','[]')
-        try:
-            items = json.loads(items_json)
-        except Exception:
-            items = []
-        if form.is_valid() and items:
-            purchase = form.save(commit=False)
-            purchase.tenant = tenant
-            purchase.total = Decimal('0.00')
-            purchase.save()
-            total = Decimal('0.00')
-            for it in items:
-                product = get_object_or_404(Product, tenant=tenant, pk=it['product_id'])
-                qty = int(it['qty'])
-                price_val = it.get('cost_price', it.get('unit_price', 0))
-                cost_price = Decimal(str(price_val))
-                line_total = cost_price * qty
-                PurchaseItem.objects.create(
-                    purchase=purchase, product=product, qty=qty,
-                    cost_price=cost_price, line_total=line_total
-                )
-                StockMove.objects.create(tenant=tenant, product=product, change=qty, reason='purchase', ref=f"PO-{purchase.id}")
-                total += line_total
-            purchase.total = total
-            purchase.save()
-            messages.success(request, f'Purchase PO-{purchase.id} saved.')
-            return redirect('purchase_create')
-        else:
-            messages.error(request, 'Please add at least one item.')
-    else:
-        form = PurchaseForm(initial={'date': date.today()}, tenant=tenant)
-    return render(request, 'purchases/new.html', {'form': form, 'products': products})
+    purchase = get_object_or_404(Purchase, tenant=tenant, pk=purchase_id)
+    return _purchase_save(request, purchase=purchase)
 
 
 # -------- POS Sale / Return (CREDIT-AWARE) --------
@@ -1116,7 +1613,8 @@ def purchase_create(request):
 def pos_sale_create(request):
     tenant = _tenant(request)
     site_settings = SiteSetting.get(tenant)
-    products, product_sets = _pos_catalog(tenant)
+    products, product_sets, product_batches = _pos_catalog(tenant)
+    is_pharmacy = tenant.business_type == 'pharmacy'
 
     def is_ajax_req(req):
         return req.headers.get('x-requested-with') == 'XMLHttpRequest' or req.POST.get('_ajax') == '1'
@@ -1144,8 +1642,21 @@ def pos_sale_create(request):
             sale = form.save(commit=False)
             sale.tenant = tenant
 
+            try:
+                _lock_and_validate_pharmacy_batches(lines, tenant, sale.is_return)
+            except ValidationError as exc:
+                error_text = '\n'.join(_validation_messages(exc))
+                if is_ajax_req(request):
+                    return ajax_error(error_text)
+                messages.error(request, error_text)
+                return render(request, 'sales/pos.html', {
+                    'form': form, 'products': products, 'product_sets': product_sets,
+                    'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
+                    'items_json': items_json, 'site_settings': site_settings,
+                })
+
             # --- HARD STOCK CHECK (normal sales only) ---
-            if not sale.is_return:
+            if not sale.is_return and not is_pharmacy:
                 req_by_pid, labels = _required_stock_for_lines(lines)
 
                 if req_by_pid:
@@ -1172,6 +1683,7 @@ def pos_sale_create(request):
                         messages.error(request, msg)
                         return render(request, 'sales/pos.html', {
                             'form': form, 'products': products, 'product_sets': product_sets, 'items_json': items_json,
+                            'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'site_settings': site_settings,
                         })
 
@@ -1203,6 +1715,7 @@ def pos_sale_create(request):
                         messages.error(request, msg)
                         return render(request, 'sales/pos.html', {
                             'form': form, 'products': products, 'product_sets': product_sets, 'items_json': items_json,
+                            'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'site_settings': site_settings,
                         })
 
@@ -1254,6 +1767,8 @@ def pos_sale_create(request):
             'form': form,
             'products': products,
             'product_sets': product_sets,
+            'product_batches': product_batches,
+            'is_pharmacy': is_pharmacy,
             'items_json': items_json,
             'site_settings': site_settings,
         })
@@ -1264,6 +1779,8 @@ def pos_sale_create(request):
         'form': form,
         'products': products,
         'product_sets': product_sets,
+        'product_batches': product_batches,
+        'is_pharmacy': is_pharmacy,
         'site_settings': site_settings,
     })
 
@@ -1442,7 +1959,7 @@ def _legacy_report_pdf_response(title, headers, rows, footer_lines=None, col_wid
     return resp
 
 
-def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=None):
+def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=None, page_size=A4):
     from xml.sax.saxutils import escape
     import re
 
@@ -1457,7 +1974,7 @@ def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=Non
 
     ncols = len(headers)
     if not col_widths:
-        page_w, _ = A4
+        page_w, _ = page_size
         total_w = page_w - 24*mm
         col_widths = [total_w / ncols] * ncols
 
@@ -1523,7 +2040,7 @@ def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=Non
 
     doc = SimpleDocTemplate(
         resp,
-        pagesize=A4,
+        pagesize=page_size,
         leftMargin=12*mm,
         rightMargin=12*mm,
         topMargin=12*mm,
@@ -1551,6 +2068,203 @@ def _report_pdf_response(title, headers, rows, footer_lines=None, col_widths=Non
 
     doc.build(story)
     return resp
+
+
+@login_required
+@permission_required('posapp.can_view_reports', raise_exception=True)
+def batch_stock_report(request):
+    tenant = _tenant(request)
+    if tenant.business_type != 'pharmacy':
+        raise PermissionDenied('Batch Stock Report is available only for pharmacy businesses.')
+
+    purchase_date_sq = (
+        PurchaseItem.objects
+        .filter(product_batch_id=OuterRef('pk'), purchase__tenant=tenant)
+        .order_by('purchase__date', 'purchase_id')
+        .values('purchase__date')[:1]
+    )
+    qs = (
+        ProductBatch.objects
+        .filter(tenant=tenant)
+        .select_related('product', 'supplier')
+        .annotate(
+            purchase_date=Subquery(purchase_date_sq),
+            effective_status=Case(
+                When(expiry_date__lt=date.today(), then=Value(ProductBatch.STATUS_EXPIRED)),
+                When(available_qty__lte=0, then=Value(ProductBatch.STATUS_EMPTY)),
+                default=Value(ProductBatch.STATUS_ACTIVE),
+                output_field=CharField(),
+            ),
+            expiry_bucket=Case(
+                When(expiry_date__lt=date.today(), then=Value('expired')),
+                When(
+                    expiry_date__gte=date.today(),
+                    expiry_date__lte=date.today() + timedelta(days=90),
+                    then=Value('near'),
+                ),
+                default=Value('normal'),
+                output_field=CharField(),
+            ),
+            stock_value=ExpressionWrapper(
+                Cast(F('available_qty'), DecimalField(max_digits=14, decimal_places=2)) * F('purchase_rate'),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            ),
+        )
+    )
+
+    q = (request.GET.get('q') or '').strip()
+    product_id = (request.GET.get('product') or '').strip()
+    supplier_id = (request.GET.get('supplier') or '').strip()
+    batch_no = (request.GET.get('batch_no') or '').strip()
+    expiry_date = (request.GET.get('expiry_date') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    start = (request.GET.get('start') or '').strip()
+    end = (request.GET.get('end') or '').strip()
+    expiry_window = (request.GET.get('expiry_window') or '').strip()
+    in_stock = (request.GET.get('in_stock') or '').strip()
+
+    def parsed_date(raw):
+        try:
+            return date.fromisoformat(raw) if raw else None
+        except (TypeError, ValueError):
+            return None
+
+    if q:
+        qs = qs.filter(
+            Q(product__code__icontains=q) |
+            Q(product__name__icontains=q) |
+            Q(batch_no__icontains=q) |
+            Q(supplier__name__icontains=q)
+        )
+    if product_id.isdigit():
+        qs = qs.filter(product_id=int(product_id))
+    if supplier_id.isdigit():
+        qs = qs.filter(supplier_id=int(supplier_id))
+    if batch_no:
+        qs = qs.filter(batch_no__icontains=batch_no)
+    expiry_date_value = parsed_date(expiry_date)
+    if expiry_date_value:
+        qs = qs.filter(expiry_date=expiry_date_value)
+    if status in dict(ProductBatch.STATUS_CHOICES):
+        qs = qs.filter(effective_status=status)
+    if in_stock == '1':
+        qs = qs.filter(available_qty__gt=0)
+    expiry_windows = {
+        '30': (date.today(), date.today() + timedelta(days=30)),
+        '60': (date.today() + timedelta(days=31), date.today() + timedelta(days=60)),
+        '90': (date.today() + timedelta(days=61), date.today() + timedelta(days=90)),
+        'near': (date.today(), date.today() + timedelta(days=90)),
+    }
+    if expiry_window in expiry_windows:
+        window_start, window_end = expiry_windows[expiry_window]
+        qs = qs.filter(expiry_date__gte=window_start, expiry_date__lte=window_end)
+    start_value = parsed_date(start)
+    end_value = parsed_date(end)
+    if start_value:
+        qs = qs.filter(purchase_date__gte=start_value)
+    if end_value:
+        qs = qs.filter(purchase_date__lte=end_value)
+
+    sort_fields = {
+        'product': 'product__name',
+        'batch': 'batch_no',
+        'supplier': 'supplier__name',
+        'purchase_date': 'purchase_date',
+        'manufacture_date': 'manufacture_date',
+        'expiry_date': 'expiry_date',
+        'available_qty': 'available_qty',
+        'purchase_rate': 'purchase_rate',
+        'sale_price': 'sale_price',
+        'mrp': 'mrp',
+        'stock_value': 'stock_value',
+        'status': 'effective_status',
+    }
+    sort = request.GET.get('sort') or 'expiry_date'
+    direction = request.GET.get('dir') or 'asc'
+    order_field = sort_fields.get(sort, 'expiry_date')
+    if direction == 'desc':
+        order_field = '-' + order_field
+    else:
+        direction = 'asc'
+    qs = qs.order_by(order_field, 'product__code', 'batch_no', 'id')
+
+    total_stock_value = qs.aggregate(
+        total=Coalesce(Sum('stock_value'), Decimal('0.00'))
+    )['total']
+
+    def report_rows(queryset):
+        status_labels = dict(ProductBatch.STATUS_CHOICES)
+        for batch in queryset:
+            yield [
+                f'{batch.product.code} - {batch.product.name}',
+                batch.batch_no,
+                batch.supplier.name if batch.supplier else '',
+                batch.purchase_date.isoformat() if batch.purchase_date else '',
+                batch.manufacture_date.isoformat(),
+                batch.expiry_date.isoformat(),
+                batch.available_qty,
+                f'{batch.purchase_rate:.2f}',
+                f'{batch.sale_price:.2f}',
+                f'{batch.mrp:.2f}',
+                f'{batch.stock_value:.2f}',
+                status_labels.get(batch.effective_status, batch.effective_status.title()),
+            ]
+
+    export_format = request.GET.get('format')
+    headers = [
+        'Product', 'Batch Number', 'Supplier', 'Purchase Date', 'Manufacture Date',
+        'Expiry Date', 'Available Qty', 'Purchase Rate', 'Sale Price', 'MRP',
+        'Stock Value', 'Status',
+    ]
+    if export_format == 'csv':
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="batch_stock_report.csv"'
+        writer = csv.writer(response)
+        writer.writerow(headers)
+        writer.writerows(report_rows(qs.iterator(chunk_size=1000)))
+        return response
+    if export_format == 'pdf':
+        from reportlab.lib.pagesizes import landscape
+        return _report_pdf_response(
+            'Batch Stock Report',
+            headers,
+            list(report_rows(qs)),
+            footer_lines=[f'Total stock value: Rs. {total_stock_value:.2f}'],
+            col_widths=[35*mm, 22*mm, 28*mm, 22*mm, 24*mm, 22*mm, 18*mm, 21*mm, 19*mm, 17*mm, 22*mm, 18*mm],
+            page_size=landscape(A4),
+        )
+
+    page_obj, page_size, base_qs = _pager_ctx(request, qs)
+    filter_params = request.GET.copy()
+    for key in ('page', 'page_size', 'sort', 'dir', 'format'):
+        filter_params.pop(key, None)
+    export_params = request.GET.copy()
+    for key in ('page', 'format'):
+        export_params.pop(key, None)
+
+    return render(request, 'reports/batch_stock.html', {
+        'page_obj': page_obj,
+        'page_size': page_size,
+        'base_qs': base_qs,
+        'filter_qs': filter_params.urlencode(),
+        'export_qs': export_params.urlencode(),
+        'products': Product.objects.filter(tenant=tenant, is_active=True).order_by('code'),
+        'suppliers': Supplier.objects.filter(tenant=tenant).order_by('name'),
+        'status_choices': ProductBatch.STATUS_CHOICES,
+        'total_stock_value': total_stock_value,
+        'q': q,
+        'selected_product': product_id,
+        'selected_supplier': supplier_id,
+        'batch_no': batch_no,
+        'expiry_date': expiry_date,
+        'selected_status': status,
+        'start': start,
+        'end': end,
+        'expiry_window': expiry_window,
+        'in_stock': in_stock,
+        'sort': sort,
+        'direction': direction,
+    })
 
 
 @login_required
@@ -1621,7 +2335,8 @@ def sales_list(request):
 def sale_update(request, sale_id):
     tenant = _tenant(request)
     sale = get_object_or_404(Sale, tenant=tenant, pk=sale_id)
-    products, product_sets = _pos_catalog(tenant)
+    products, product_sets, product_batches = _pos_catalog(tenant)
+    is_pharmacy = tenant.business_type == 'pharmacy'
 
     if request.method == 'POST':
         form = SaleForm(request.POST, instance=sale, tenant=tenant)
@@ -1636,11 +2351,19 @@ def sale_update(request, sale_id):
             lines = []
 
         if form.is_valid() and lines:
-            # wipe previous postings
-            StockMove.objects.filter(tenant=tenant, ref__in=[f"INV-{sale.id}", f"CRN-{sale.id}"]).delete()
-            SaleItem.objects.filter(sale=sale).delete()
-            CustomerLedger.objects.filter(tenant=tenant, sale=sale).delete()
+            try:
+                _lock_and_validate_pharmacy_batches(
+                    lines,
+                    tenant,
+                    form.cleaned_data.get('is_return', False),
+                    replacing_sale=sale,
+                )
+            except ValidationError as exc:
+                for error in _validation_messages(exc):
+                    messages.error(request, error)
+                lines = []
 
+        if form.is_valid() and lines:
             sale = form.save(commit=False)
             sale.tenant = tenant
 
@@ -1669,9 +2392,20 @@ def sale_update(request, sale_id):
                         messages.error(request, msg)
                         return render(request, 'sales/pos.html', {
                             'form': form, 'products': products, 'product_sets': product_sets, 'editing': True,
+                            'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'sale': sale, 'prefill_items': json.dumps([]),
                             'site_settings': SiteSetting.get(tenant),
                         })
+
+            # Validation has passed; now safely undo and rebuild postings.
+            if is_pharmacy:
+                _reverse_sale_batch_inventory(sale)
+                for line in lines:
+                    if line.get('product_batch'):
+                        line['product_batch'].refresh_from_db()
+            StockMove.objects.filter(tenant=tenant, ref__in=[f"INV-{sale.id}", f"CRN-{sale.id}"]).delete()
+            SaleItem.objects.filter(sale=sale).delete()
+            CustomerLedger.objects.filter(tenant=tenant, sale=sale).delete()
 
             sign = Decimal('-1') if sale.is_return else Decimal('1')
             sale.subtotal *= sign
@@ -1695,13 +2429,16 @@ def sale_update(request, sale_id):
         form = SaleForm(instance=sale, tenant=tenant)
 
     prefill = []
-    for it in SaleItem.objects.filter(sale=sale).select_related('product', 'product_set'):
+    for it in SaleItem.objects.filter(sale=sale).select_related('product', 'product_batch', 'product_set'):
         row = {
-            "kind": "set" if it.product_set_id else "product",
+            "kind": "batch" if it.product_batch_id else ("set" if it.product_set_id else "product"),
             "qty": abs(int(it.qty or 0)),
             "unit_price": float(it.unit_price or 0),
         }
-        if it.product_set_id:
+        if it.product_batch_id:
+            row["batch_id"] = it.product_batch_id
+            row["product_id"] = it.product_id
+        elif it.product_set_id:
             row["set_id"] = it.product_set_id
         elif it.product_id:
             row["product_id"] = it.product_id
@@ -1711,6 +2448,8 @@ def sale_update(request, sale_id):
         'form': form,
         'products': products,
         'product_sets': product_sets,
+        'product_batches': product_batches,
+        'is_pharmacy': is_pharmacy,
         'editing': True,
         'sale': sale,
         'prefill_items': json.dumps(prefill),
@@ -2145,6 +2884,9 @@ def stock_bulk_adjust(request):
     """
     from .models import Product, StockMove  # local to avoid import cycles
     tenant = _tenant(request)
+    if tenant.business_type == 'pharmacy':
+        messages.info(request, 'Pharmacy stock must be managed through purchase batches.')
+        return redirect('purchase_create')
 
     # Optional: sample CSV
     if request.GET.get('sample'):
@@ -2247,6 +2989,11 @@ def stock_bulk_template(request):
     - Or use 'new_stock' to set absolute stock (integer).
     - 'note' is optional.
     """
+    tenant = _tenant(request)
+    if tenant.business_type == 'pharmacy':
+        messages.info(request, 'Pharmacy stock must be managed through purchase batches.')
+        return redirect('purchase_create')
+
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(['code','barcode','delta','new_stock','note'])

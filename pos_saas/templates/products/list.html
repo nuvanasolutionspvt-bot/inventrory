@@ -70,11 +70,6 @@
             <th style="min-width:110px;">Code</th>
             <th style="min-width:120px;">Barcode</th>
             <th>Name</th>
-            {% if is_pharmacy %}
-            <th style="min-width:120px;">Batch</th>
-            <th style="min-width:130px;">Mfg Date</th>
-            <th style="min-width:130px;">Expiry</th>
-            {% endif %}
             <th>Category</th>
             <th class="text-end" style="width:120px;">Unit Price</th>
             <th class="text-end" style="width:120px;">Cost</th>
@@ -108,7 +103,7 @@
                 <span class="badge rounded-pill text-bg-secondary">Inactive</span>
               {% endif %}
             </td>
-            {% if is_pharmacy %}
+            {% if False %}{# Legacy Product batch fields are intentionally hidden; use ProductBatch via Purchase. #}
             <td class="font-monospace">{{ p.batch_no }}</td>
             <td>{{ p.manufacture_date|date:"Y-m-d" }}</td>
             <td>
@@ -124,7 +119,7 @@
             <td class="text-end">₹ {{ p.cost_price|floatformat:2 }}</td>
             <td class="text-end">{{ p.tax_percent|floatformat:2 }}</td>
             <td class="text-end">
-              {% with s=p.stock rl=p.reorder_level %}
+              {% with s=p.stock_sum rl=p.reorder_level %}
                 {% if s <= 0 %}
                   <span class="badge text-bg-danger">{{ s }}</span>
                 {% elif rl and s|add:0 <= rl|add:0 %}
@@ -136,8 +131,8 @@
             </td>
             <td class="text-end">
               <div class="btn-group">
-                <a class="btn btn-sm btn-outline-primary" href="{% url 'product_add_stock' p.id %}">
-                  <i class="bi bi-boxes me-1"></i> Stock
+                <a class="btn btn-sm btn-outline-primary" href="{% if is_pharmacy %}{% url 'purchase_create' %}{% else %}{% url 'product_add_stock' p.id %}{% endif %}">
+                  <i class="bi bi-boxes me-1"></i>{% if is_pharmacy %} Purchase{% else %} Stock{% endif %}
                 </a>
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'product_update' p.id %}">
                   <i class="bi bi-pencil-square me-1"></i> Edit
@@ -147,7 +142,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="{% if is_pharmacy %}12{% else %}9{% endif %}" class="text-center py-5">
+            <td colspan="9" class="text-center py-5">
               <div class="text-muted mb-2"><i class="bi bi-inboxes"></i> No products found</div>
               <a href="{% url 'product_create' %}" class="btn btn-sm btn-success">
                 <i class="bi bi-plus-circle me-1"></i> Create your first product
@@ -183,11 +178,7 @@
           <div class="small text-muted">
             <div class="mb-1">
               <strong>Columns:</strong>
-              {% if is_pharmacy %}
-                <code>code</code>, <code>barcode</code>, <code>name</code>, <code>batch_no</code>, <code>manufacture_date</code>, <code>expiry_date</code>, <code>category</code>, <code>unit_price</code>, <code>cost_price</code>, <code>tax_percent</code>, <code>reorder_level</code>, <code>is_active</code>
-              {% else %}
-                <code>code</code>, <code>barcode</code>, <code>name</code>, <code>category</code>, <code>unit_price</code>, <code>cost_price</code>, <code>tax_percent</code>, <code>reorder_level</code>, <code>is_active</code>
-              {% endif %}
+              <code>code</code>, <code>barcode</code>, <code>name</code>, <code>category</code>, <code>unit_price</code>, <code>cost_price</code>, <code>tax_percent</code>, <code>reorder_level</code>, <code>is_active</code>
             </div>
             <div>Tip: Export once via <b>Export CSV</b> to get the exact header and formats.</div>
           </div>
@@ -242,15 +233,11 @@
   const sampleBtn = document.getElementById('btnDownloadSample');
   if (sampleBtn) {
     sampleBtn.addEventListener('click', function(){
-      const rows = {% if is_pharmacy %}[
-        ["code","barcode","name","batch_no","manufacture_date","expiry_date","category","unit_price","cost_price","tax_percent","reorder_level","is_active"],
-        ["MED-001","8901234567890","Paracetamol 500mg","BATCH-01","2026-05-08","2028-05-08","Tablets","10.00","6.00","12.00","20","1"],
-        ["SYP-001","","Cough Syrup","BATCH-02","2026-05-08","2028-05-08","Syrups","60.00","40.00","12.00","15","1"]
-      ]{% else %}[
+      const rows = [
         ["code","barcode","name","category","unit_price","cost_price","tax_percent","reorder_level","is_active"],
         ["PEN-001","8901234567890","Ball Pen Blue","Pens","10.00","6.00","12.00","20","1"],
         ["NOTE-A5","","Notebook A5 Ruled","Notebooks","60.00","40.00","12.00","15","1"]
-      ]{% endif %};
+      ];
       const csv = rows.map(r => r.map(cell => {
         const s = String(cell ?? "");
         return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;

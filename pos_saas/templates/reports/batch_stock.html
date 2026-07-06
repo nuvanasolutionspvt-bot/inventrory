@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Batch Stock Report — Nuvana POS{% endblock %}
+{% block breadcrumb %}Reports / Batch Stock{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h3 class="mb-1">Batch Stock Report</h3>
+    <div class="text-muted small">Current pharmacy inventory by purchased batch</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-success" href="?{% if export_qs %}{{ export_qs }}&{% endif %}format=csv">
+      <i class="bi bi-filetype-csv me-1"></i>CSV
+    </a>
+    <a class="btn btn-primary" href="?{% if export_qs %}{{ export_qs }}&{% endif %}format=pdf">
+      <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+    </a>
+  </div>
+</div>
+
+<form method="get" class="card shadow-sm mb-3">
+  {% if expiry_window %}<input type="hidden" name="expiry_window" value="{{ expiry_window }}">{% endif %}
+  {% if in_stock %}<input type="hidden" name="in_stock" value="{{ in_stock }}">{% endif %}
+  <div class="card-body">
+    {% if expiry_window %}
+    <div class="alert alert-warning py-2 mb-3">
+      Showing batches expiring in the {{ expiry_window }}-day dashboard bucket.
+    </div>
+    {% endif %}
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <label class="form-label" for="batch-search">Search</label>
+        <input id="batch-search" type="search" name="q" class="form-control" value="{{ q }}" placeholder="Product, code, batch, or supplier">
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label" for="batch-product">Product</label>
+        <select id="batch-product" name="product" class="form-select js-enhance-select" data-allow-clear="true" data-placeholder="All products">
+          <option value="">All products</option>
+          {% for product in products %}
+          <option value="{{ product.id }}" {% if selected_product == product.id|stringformat:'s' %}selected{% endif %}>{{ product.code }} - {{ product.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <label class="form-label" for="batch-supplier">Supplier</label>
+        <select id="batch-supplier" name="supplier" class="form-select js-enhance-select" data-allow-clear="true" data-placeholder="All suppliers">
+          <option value="">All suppliers</option>
+          {% for supplier in suppliers %}
+          <option value="{{ supplier.id }}" {% if selected_supplier == supplier.id|stringformat:'s' %}selected{% endif %}>{{ supplier.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12 col-md-6 col-lg-3">
+        <label class="form-label" for="batch-number">Batch Number</label>
+        <input id="batch-number" type="text" name="batch_no" class="form-control" value="{{ batch_no }}" placeholder="Contains…">
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <label class="form-label" for="batch-expiry">Expiry Date</label>
+        <input id="batch-expiry" type="date" name="expiry_date" class="form-control" value="{{ expiry_date }}">
+      </div>
+      <div class="col-12 col-md-6 col-lg-2">
+        <label class="form-label" for="batch-status">Status</label>
+        <select id="batch-status" name="status" class="form-select">
+          <option value="">All statuses</option>
+          {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-2">
+        <label class="form-label" for="batch-start">Purchase From</label>
+        <input id="batch-start" type="date" name="start" class="form-control" value="{{ start }}">
+      </div>
+      <div class="col-12 col-md-6 col-lg-2">
+        <label class="form-label" for="batch-end">Purchase To</label>
+        <input id="batch-end" type="date" name="end" class="form-control" value="{{ end }}">
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white d-flex flex-wrap justify-content-between gap-2">
+    <a href="{% url 'batch_stock_report' %}" class="btn btn-light">Clear</a>
+    <button class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Apply Filters</button>
+  </div>
+</form>
+
+<div class="card shadow-sm">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">{{ page_obj.paginator.count }} batch{{ page_obj.paginator.count|pluralize:"es" }}</span>
+    <span class="fw-semibold">Total Stock Value: ₹ {{ total_stock_value|floatformat:2 }}</span>
+  </div>
+  <div class="table-responsive" style="overflow-x:auto;">
+    <table class="table table-sm table-striped align-middle mb-0" style="min-width:1700px;">
+      <thead>
+        <tr>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=product&dir={% if sort == 'product' and direction == 'asc' %}desc{% else %}asc{% endif %}">Product</a></th>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=batch&dir={% if sort == 'batch' and direction == 'asc' %}desc{% else %}asc{% endif %}">Batch Number</a></th>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=supplier&dir={% if sort == 'supplier' and direction == 'asc' %}desc{% else %}asc{% endif %}">Supplier</a></th>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=purchase_date&dir={% if sort == 'purchase_date' and direction == 'asc' %}desc{% else %}asc{% endif %}">Purchase Date</a></th>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=manufacture_date&dir={% if sort == 'manufacture_date' and direction == 'asc' %}desc{% else %}asc{% endif %}">Manufacture Date</a></th>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=expiry_date&dir={% if sort == 'expiry_date' and direction == 'asc' %}desc{% else %}asc{% endif %}">Expiry Date</a></th>
+          <th class="text-end"><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=available_qty&dir={% if sort == 'available_qty' and direction == 'asc' %}desc{% else %}asc{% endif %}">Available Qty</a></th>
+          <th class="text-end"><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=purchase_rate&dir={% if sort == 'purchase_rate' and direction == 'asc' %}desc{% else %}asc{% endif %}">Purchase Rate</a></th>
+          <th class="text-end"><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=sale_price&dir={% if sort == 'sale_price' and direction == 'asc' %}desc{% else %}asc{% endif %}">Sale Price</a></th>
+          <th class="text-end"><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=mrp&dir={% if sort == 'mrp' and direction == 'asc' %}desc{% else %}asc{% endif %}">MRP</a></th>
+          <th class="text-end"><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=stock_value&dir={% if sort == 'stock_value' and direction == 'asc' %}desc{% else %}asc{% endif %}">Stock Value</a></th>
+          <th><a class="text-decoration-none" href="?{% if filter_qs %}{{ filter_qs }}&{% endif %}sort=status&dir={% if sort == 'status' and direction == 'asc' %}desc{% else %}asc{% endif %}">Status</a></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in page_obj %}
+        <tr class="{% if batch.expiry_bucket == 'expired' %}table-danger{% elif batch.expiry_bucket == 'near' %}table-warning{% endif %}">
+          <td><div class="fw-semibold">{{ batch.product.name }}</div><div class="small text-muted">{{ batch.product.code }}</div></td>
+          <td class="font-monospace">{{ batch.batch_no }}</td>
+          <td>{{ batch.supplier.name|default:"—" }}</td>
+          <td>{{ batch.purchase_date|date:"Y-m-d"|default:"—" }}</td>
+          <td>{{ batch.manufacture_date|date:"Y-m-d" }}</td>
+          <td>{{ batch.expiry_date|date:"Y-m-d" }}</td>
+          <td class="text-end fw-semibold">{{ batch.available_qty }}</td>
+          <td class="text-end">₹ {{ batch.purchase_rate|floatformat:2 }}</td>
+          <td class="text-end">₹ {{ batch.sale_price|floatformat:2 }}</td>
+          <td class="text-end">₹ {{ batch.mrp|floatformat:2 }}</td>
+          <td class="text-end fw-semibold">₹ {{ batch.stock_value|floatformat:2 }}</td>
+          <td>
+            {% if batch.effective_status == 'expired' %}<span class="badge text-bg-danger">Expired</span>
+            {% elif batch.effective_status == 'empty' %}<span class="badge text-bg-secondary">Empty</span>
+            {% else %}<span class="badge text-bg-success">Active</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="12" class="text-center text-muted py-4">No batches match the selected filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer bg-white">
+    {% include 'partials/pagination.html' with page_obj=page_obj base_qs=base_qs page_size=page_size %}
+  </div>
+</div>
+{% endblock %}

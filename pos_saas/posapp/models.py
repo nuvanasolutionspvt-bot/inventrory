@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.conf import settings as dj_settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
@@ -220,6 +221,150 @@ class Product(TimeStampedModel):
         return agg['total'] or 0
 
 
+class ProductBatch(TimeStampedModel):
+    """Batch-level inventory record for pharmacy products."""
+
+    STATUS_ACTIVE = 'active'
+    STATUS_EXPIRED = 'expired'
+    STATUS_EMPTY = 'empty'
+    STATUS_CHOICES = (
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_EMPTY, 'Empty'),
+    )
+
+    tenant = models.ForeignKey(
+        Tenant,
+        related_name='product_batches',
+        on_delete=models.CASCADE,
+        verbose_name='Business',
+    )
+    product = models.ForeignKey(
+        Product,
+        related_name='batches',
+        on_delete=models.CASCADE,
+    )
+    supplier = models.ForeignKey(
+        'Supplier',
+        related_name='product_batches',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    batch_no = models.CharField(max_length=64, verbose_name='Batch number')
+    manufacture_date = models.DateField(verbose_name='Manufacture date')
+    expiry_date = models.DateField(verbose_name='Expiry date')
+    purchase_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Purchase rate',
+    )
+    sale_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='Sale price',
+    )
+    mrp = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name='MRP',
+    )
+    received_qty = models.PositiveIntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name='Received quantity',
+    )
+    available_qty = models.PositiveIntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name='Available quantity',
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+    )
+    notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Product batch'
+        verbose_name_plural = 'Product batches'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'product', 'batch_no'],
+                name='uniq_tenant_product_batch_no',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['tenant'], name='posapp_bat_tenant_1f413b_idx'),
+            models.Index(fields=['product'], name='posapp_bat_product_17079d_idx'),
+            models.Index(fields=['batch_no'], name='posapp_bat_batch_39a6e9_idx'),
+            models.Index(fields=['expiry_date'], name='posapp_bat_expiry_8ec7df_idx'),
+            models.Index(fields=['status'], name='posapp_bat_status_16aa98_idx'),
+        ]
+        ordering = ['expiry_date', 'batch_no']
+
+    def __str__(self):
+        return f"{self.product.code} - {self.product.name} / {self.batch_no}"
+
+    def clean(self):
+        errors = {}
+        batch_no = (self.batch_no or '').strip()
+
+        if not batch_no:
+            errors['batch_no'] = 'Batch number cannot be blank.'
+        else:
+            self.batch_no = batch_no
+
+        if self.tenant_id and self.tenant.business_type != 'pharmacy':
+            errors['tenant'] = 'Product batches are available only for pharmacy businesses.'
+
+        if self.product_id and self.tenant_id and self.product.tenant_id != self.tenant_id:
+            errors['product'] = 'Product must belong to the same business as this batch.'
+
+        if self.supplier_id and self.tenant_id and self.supplier.tenant_id != self.tenant_id:
+            errors['supplier'] = 'Supplier must belong to the same business as this batch.'
+
+        if self.manufacture_date and self.expiry_date and self.expiry_date <= self.manufacture_date:
+            errors['expiry_date'] = 'Expiry date must be after manufacture date.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def is_expired(self):
+        """Return True when this batch is past its expiry date."""
+        return bool(self.expiry_date and self.expiry_date < timezone.localdate())
+
+    def days_to_expiry(self):
+        """Return days remaining until expiry; negative means already expired."""
+        if not self.expiry_date:
+            return None
+        return (self.expiry_date - timezone.localdate()).days
+
+    def stock_available(self):
+        """Return True when this batch still has sellable stock."""
+        return self.available_qty > 0 and not self.is_expired()
+
+    def get_status(self):
+        """Derive the current batch status from expiry and available quantity."""
+        if self.is_expired():
+            return self.STATUS_EXPIRED
+        if self.available_qty <= 0:
+            return self.STATUS_EMPTY
+        return self.STATUS_ACTIVE
+
+    def save(self, *args, **kwargs):
+        self.status = self.get_status()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
 class ProductSet(TimeStampedModel):
     tenant = models.ForeignKey(Tenant, related_name='product_sets', on_delete=models.CASCADE)
     code = models.CharField(max_length=64)
@@ -344,6 +489,13 @@ class Purchase(TimeStampedModel):
 class PurchaseItem(models.Model):
     purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    product_batch = models.ForeignKey(
+        ProductBatch,
+        related_name='purchase_items',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
     qty = models.PositiveIntegerField()
     cost_price = models.DecimalField(max_digits=10, decimal_places=2)
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
@@ -384,6 +536,13 @@ class Sale(TimeStampedModel):
 class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.PROTECT, null=True, blank=True)
+    product_batch = models.ForeignKey(
+        ProductBatch,
+        related_name='sale_items',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+    )
     product_set = models.ForeignKey(ProductSet, on_delete=models.PROTECT, null=True, blank=True)
     description = models.CharField(max_length=240, blank=True)
     details = models.TextField(blank=True)
