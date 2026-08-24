@@ -798,6 +798,21 @@ def company_business_edit(request, tenant_id):
     })
 
 
+@user_passes_test(_company_admin_required, login_url='company_login')
+def company_business_delete(request, tenant_id):
+    if request.method != 'POST':
+        messages.error(request, 'Use the delete button from the business list.')
+        return redirect('company_business_list')
+
+    tenant = get_object_or_404(Tenant, pk=tenant_id)
+    business_name = tenant.name
+    if request.session.get(SESSION_TENANT_KEY) == tenant.pk:
+        request.session.pop(SESSION_TENANT_KEY, None)
+    tenant.delete()
+    messages.success(request, f"Business '{business_name}' and its business data deleted.")
+    return redirect('company_business_list')
+
+
 @login_required
 def subscription(request):
     tenant = _tenant(request)

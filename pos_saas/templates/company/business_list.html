@@ -41,9 +41,17 @@
               {% endif %}
             </td>
             <td class="text-end">
-              <a href="{% url 'company_business_edit' row.tenant.id %}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-pencil-square me-1"></i>Edit
-              </a>
+              <div class="d-inline-flex gap-2">
+                <a href="{% url 'company_business_edit' row.tenant.id %}" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-pencil-square me-1"></i>Edit
+                </a>
+                <form method="post" action="{% url 'company_business_delete' row.tenant.id %}" class="m-0" onsubmit="return confirm('Delete {{ row.tenant.name|escapejs }} and all data for this business only? This cannot be undone.');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash me-1"></i>Delete
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
         {% empty %}
