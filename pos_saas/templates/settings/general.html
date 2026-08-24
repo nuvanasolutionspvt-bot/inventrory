@@ -73,6 +73,21 @@
           {% endif %}
         </div>
 
+        {% if form.restaurant_menu_tax_percent %}
+        <h6 class="text-muted">Restaurant Menu</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Menu Tax %</label>
+            <div class="input-group">
+              {{ form.restaurant_menu_tax_percent }}
+              <span class="input-group-text">%</span>
+            </div>
+            <div class="form-text">Saving this applies the percentage to all menu products.</div>
+            {% for error in form.restaurant_menu_tax_percent.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
         <h6 class="text-muted">Printing</h6>
         <div class="row g-3 mb-3">
           <div class="col-md-4">

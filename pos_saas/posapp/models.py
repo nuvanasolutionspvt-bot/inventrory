@@ -187,6 +187,7 @@ class Product(TimeStampedModel):
     code = models.CharField(max_length=64)
     barcode = models.CharField(max_length=64, null=True, blank=True)
     name = models.CharField(max_length=200)
+    image = models.ImageField(upload_to='product_images/%Y/%m/', blank=True, null=True)
     batch_no = models.CharField(max_length=64, default='')
     manufacture_date = models.DateField(default=timezone.localdate)
     expiry_date = models.DateField(null=True, blank=True)
@@ -654,6 +655,7 @@ class SiteSetting(models.Model):
     bill_title  = models.CharField(max_length=60, default='Tax Invoice')
     bill_footer = models.CharField(max_length=200, blank=True, default='')
     bill_tax_inclusive = models.BooleanField(default=True)
+    restaurant_menu_tax_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     printer_type = models.CharField(max_length=20, choices=PRINTER_TYPE_CHOICES, default='a4')
     payment_qr = models.ImageField(upload_to='tenant_qr/%Y/%m/', blank=True, null=True)
 

@@ -1155,7 +1155,7 @@ def product_list(request):
 def product_create(request):
     tenant = _tenant(request)
     if request.method == 'POST':
-        form = ProductForm(request.POST, tenant=tenant)
+        form = ProductForm(request.POST, request.FILES, tenant=tenant)
         if form.is_valid():
             form.save()
             messages.success(request, 'Product created.')
@@ -1170,7 +1170,7 @@ def product_update(request, pk):
     tenant = _tenant(request)
     product = get_object_or_404(Product, tenant=tenant, pk=pk)
     if request.method == 'POST':
-        form = ProductForm(request.POST, instance=product, tenant=tenant)
+        form = ProductForm(request.POST, request.FILES, instance=product, tenant=tenant)
         if form.is_valid():
             form.save()
             messages.success(request, 'Product updated.')
@@ -2835,13 +2835,20 @@ def settings_general(request):
     tenant = _tenant(request)
     s = SiteSetting.get(tenant)
     if request.method == 'POST':
-        form = SiteSettingForm(request.POST, request.FILES, instance=s)
+        form = SiteSettingForm(request.POST, request.FILES, instance=s, tenant=tenant)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Settings saved.')
+            settings_obj = form.save()
+            updated_count = 0
+            menu_tax = form.cleaned_data.get('restaurant_menu_tax_percent') if tenant.business_type == 'restaurant' else None
+            if tenant.business_type == 'restaurant' and menu_tax is not None:
+                updated_count = Product.objects.filter(tenant=tenant).update(tax_percent=menu_tax)
+            if updated_count:
+                messages.success(request, f'Settings saved. Tax {menu_tax}% applied to {updated_count} menu product(s).')
+            else:
+                messages.success(request, 'Settings saved.')
             return redirect('settings_general')
     else:
-        form = SiteSettingForm(instance=s)
+        form = SiteSettingForm(instance=s, tenant=tenant)
     return render(request, 'settings/general.html', {'form': form, 'title': 'POS Settings'})
 
 

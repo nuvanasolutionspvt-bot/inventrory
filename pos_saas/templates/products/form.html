@@ -6,7 +6,7 @@
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-xl-10">
-    <form method="post" class="card shadow-sm border-0" id="product-form" novalidate>
+    <form method="post" enctype="multipart/form-data" class="card shadow-sm border-0" id="product-form" novalidate>
       {% csrf_token %}
 
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -60,6 +60,21 @@
               {% endif %}
             </div>
 
+            {% if form.image %}
+            <div class="col-md-6">
+              <label class="form-label">Product Image</label>
+              {{ form.image }}
+              {% if form.image.errors %}
+                <div class="invalid-feedback d-block">{{ form.image.errors|striptags }}</div>
+              {% else %}
+                <div class="form-text">PNG or JPG only. Maximum size 2 MB.</div>
+              {% endif %}
+              {% if form.instance.image %}
+                <img src="{{ form.instance.image.url }}" alt="{{ form.instance.name }}" class="mt-2 rounded border" style="width:96px;height:72px;object-fit:cover;">
+              {% endif %}
+            </div>
+            {% endif %}
+
           </div>
         </div>
 
@@ -70,7 +85,7 @@
             <div class="fw-semibold">Catalog & Pricing</div>
           </div>
           <div class="row g-3">
-            <div class="col-md-4">
+            <div class="{% if form.half_price %}col-md-3{% else %}col-md-4{% endif %}">
               <label class="form-label">Category</label>
               {{ form.category }}
               {% if form.category.errors %}
@@ -79,21 +94,36 @@
             </div>
 
             <div class="col-md-2">
-              <label class="form-label">Unit Price</label>
+              <label class="form-label">{% if form.half_price %}Full Price{% else %}Unit Price{% endif %}</label>
               <div class="input-group">
-                <span class="input-group-text">₹</span>
+                <span class="input-group-text">&#8377;</span>
                 {{ form.unit_price }}
               </div>
               {% if form.unit_price.errors %}
                 <div class="invalid-feedback d-block">{{ form.unit_price.errors|striptags }}</div>
               {% endif %}
-              <div class="form-text">Selling price (ex/incl tax as per settings).</div>
+              <div class="form-text">{% if form.half_price %}Full portion price.{% else %}Selling price (ex/incl tax as per settings).{% endif %}</div>
             </div>
+
+            {% if form.half_price %}
+            <div class="col-md-2">
+              <label class="form-label">Half Price</label>
+              <div class="input-group">
+                <span class="input-group-text">&#8377;</span>
+                {{ form.half_price }}
+              </div>
+              {% if form.half_price.errors %}
+                <div class="invalid-feedback d-block">{{ form.half_price.errors|striptags }}</div>
+              {% else %}
+                <div class="form-text">Optional half portion price.</div>
+              {% endif %}
+            </div>
+            {% endif %}
 
             <div class="col-md-2">
               <label class="form-label">Cost Price</label>
               <div class="input-group">
-                <span class="input-group-text">₹</span>
+                <span class="input-group-text">&#8377;</span>
                 {{ form.cost_price}}
               </div>
               {% if form.cost_price.errors %}
@@ -133,6 +163,15 @@
             <div class="fw-semibold">Status</div>
           </div>
           <div class="row g-3">
+            {% if form.full_available %}
+            <div class="col-md-3 d-flex align-items-center">
+              <div class="form-check mt-1">
+                {{ form.full_available|add_class:"form-check-input"|attr:"id:p_full_available" }}
+                <label class="form-check-label" for="p_full_available">Full Available</label>
+                {% if form.full_available.errors %}<div class="invalid-feedback d-block">{{ form.full_available.errors|striptags }}</div>{% endif %}
+              </div>
+            </div>
+            {% endif %}
             <div class="col-md-3 d-flex align-items-center">
               <div class="form-check mt-1">
                 {{ form.is_active|add_class:"form-check-input"|attr:"id:p_is_active" }}
@@ -143,7 +182,6 @@
         </div>
 
       </div>
-
       <div class="card-footer bg-white d-flex justify-content-between align-items-center" style="position:sticky; bottom:0;">
         <div class="text-muted small">
           <i class="bi bi-keyboard me-1"></i>Shortcut: <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd> to save

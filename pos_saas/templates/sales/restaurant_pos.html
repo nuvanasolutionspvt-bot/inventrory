@@ -5,8 +5,11 @@
 
 {% block content %}
 <style>
-  .restaurant-pos .category-strip{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.5rem}
-  .restaurant-pos .category-btn{white-space:nowrap}
+  main.app-shell:has(.restaurant-pos){max-width:1320px}
+  .restaurant-pos .menu-workspace{display:grid;grid-template-columns:150px minmax(0,1fr);gap:1rem;align-items:start}
+  .restaurant-pos .category-sidebar{position:sticky;top:1rem;background:#fff;border:1px solid var(--card-border);border-radius:.75rem;padding:.75rem}
+  .restaurant-pos .category-list{display:flex;flex-direction:column;gap:.5rem;max-height:calc(100vh - 10rem);overflow-y:auto}
+  .restaurant-pos .category-btn{white-space:normal;text-align:left}
   .restaurant-pos .menu-card{cursor:pointer;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
   .restaurant-pos .menu-card:hover{transform:translateY(-2px);border-color:var(--brand-2);box-shadow:0 5px 16px rgba(20,38,58,.09)}
   .restaurant-pos .menu-card:active{transform:scale(.98)}
@@ -21,7 +24,12 @@
   .restaurant-pos .qty-control{display:inline-flex;align-items:center;border:1px solid var(--card-border);border-radius:.5rem;overflow:hidden}
   .restaurant-pos .qty-control button{border:0;background:#fff;width:2rem;height:2rem;color:var(--brand-2);font-weight:700}
   .restaurant-pos .qty-control span{min-width:1.8rem;text-align:center;font-weight:600}
-  @media(max-width:991.98px){.restaurant-pos .cart-panel{position:static}}
+  @media(max-width:991.98px){
+    .restaurant-pos .cart-panel,.restaurant-pos .category-sidebar{position:static}
+    .restaurant-pos .menu-workspace{grid-template-columns:1fr}
+    .restaurant-pos .category-list{flex-direction:row;overflow-x:auto;max-height:none;padding-bottom:.25rem}
+    .restaurant-pos .category-btn{white-space:nowrap;text-align:center}
+  }
 </style>
 
 <form method="post" id="restaurantPosForm" class="restaurant-pos" novalidate>
@@ -29,20 +37,26 @@
   <input type="hidden" name="items_json" id="items_json" value="{{ items_json|default:'[]'|escape }}">
   <input type="hidden" name="is_return" value="">
   <div class="row g-4">
-    <section class="col-12 col-lg-8">
+    <section class="col-12 col-lg-9">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div><h1 class="h3 mb-1">{% if editing %}Edit Bill INV-{{ sale.id }}{% else %}Restaurant Billing{% endif %}</h1><p class="text-muted mb-0">Choose a category, then tap an item to add it.</p></div>
         <div class="input-group" style="max-width:280px"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span><input id="menuSearch" class="form-control" type="search" placeholder="Search menu"></div>
       </div>
-      <div class="category-strip mb-3">
-        <button type="button" class="btn btn-primary category-btn" data-category="all">All</button>
-        {% for category in restaurant_categories %}<button type="button" class="btn btn-outline-primary category-btn" data-category="{{ category.id }}">{{ category.name }}</button>{% endfor %}
-      </div>
-      <div id="menuGrid" class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-3">
+      <div class="menu-workspace">
+        <aside class="category-sidebar" aria-label="Menu categories">
+          <div class="small text-uppercase text-muted fw-semibold mb-2">Categories</div>
+          <div class="category-list">
+            <button type="button" class="btn btn-primary category-btn" data-category="all">All</button>
+            {% for category in restaurant_categories %}<button type="button" class="btn btn-outline-primary category-btn" data-category="{{ category.id }}">{{ category.name }}</button>{% endfor %}
+          </div>
+        </aside>
+        <div>
+          <div id="menuGrid" class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-3">
         {% for product in products %}
         <div class="col menu-item" data-category="{{ product.category_id|default:'' }}" data-name="{{ product.name|lower }}">
           <article class="card menu-card h-100 w-100" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.unit_price }}" data-half-price="{{ product.half_price|default:'' }}" data-full-available="{{ product.full_available|yesno:'true,false' }}" data-tax="{{ product.tax_percent }}">
             <button type="button" class="card-add-area add-item" aria-label="Add {{ product.name }}">
+              {% if product.image %}<img class="menu-image" src="{{ product.image.url }}" alt="{{ product.name }}" loading="lazy">{% else %}
               {% if product.name == 'Crispy Chicken' %}<img class="menu-image" src="/media/items/Crispy%20Chicken.jpg" alt="Crispy Chicken" loading="lazy">{% endif %}
               {% if product.name == 'Chicken Schezwan' %}<img class="menu-image" src="/media/items/Chicken%20Schezwan.webp" alt="Chicken Schezwan" loading="lazy">{% endif %}
               {% if product.name == 'Dragon Chicken' %}<img class="menu-image" src="/media/items/Dragon%20Chicken.avif" alt="Dragon Chicken" loading="lazy">{% endif %}
@@ -90,6 +104,7 @@
               {% if product.name == 'Gulab Jamun' %}<img class="menu-image" src="/media/items/Gulab%20Jamun.webp" alt="Gulab Jamun" loading="lazy">{% endif %}
               {% if product.name == 'Ice Cream' %}<img class="menu-image" src="/media/items/Ice%20Cream.webp" alt="Ice Cream" loading="lazy">{% endif %}
               {% if product.name == 'Chocolate Brownie' %}<img class="menu-image" src="/media/items/Chocolate%20Brownie.webp" alt="Chocolate Brownie" loading="lazy">{% endif %}
+              {% endif %}
               <div class="card-body p-3"><div class="small text-muted mb-1">{{ product.category.name|default:'Menu' }}</div><div class="fw-semibold">{{ product.name }}</div><div class="selected-price">₹<span class="selected-price-value">{% if product.full_available %}{{ product.unit_price|floatformat:2 }}{% else %}{{ product.half_price|floatformat:2 }}{% endif %}</span></div></div>
             </button>
             <div class="portion-selector">
@@ -100,11 +115,13 @@
           </article>
         </div>
         {% empty %}<div class="col-12"><div class="card p-5 text-center text-muted">No menu items available. Add items from Restaurant Catalog Setup.</div></div>{% endfor %}
+          </div>
+          <div id="menuEmpty" class="card p-5 text-center d-none"><i class="bi bi-search fs-2 text-muted"></i><div class="mt-2">No matching menu items</div></div>
+        </div>
       </div>
-      <div id="menuEmpty" class="card p-5 text-center d-none"><i class="bi bi-search fs-2 text-muted"></i><div class="mt-2">No matching menu items</div></div>
     </section>
 
-    <aside class="col-12 col-lg-4">
+    <aside class="col-12 col-lg-3">
       <div class="card shadow-sm cart-panel">
         <div class="card-header bg-white"><h2 class="h5 mb-0">Current Order <span id="cartCount" class="badge bg-primary ms-1">0</span></h2></div>
         <div class="card-body">

@@ -573,17 +573,21 @@ class RolePermissionForm(forms.Form):
 
 class ProductForm(TenantModelFormMixin, forms.ModelForm):
     PHARMACY_FIELDS = ('batch_no', 'manufacture_date', 'expiry_date')
+    PRODUCT_IMAGE_MAX_SIZE = 2 * 1024 * 1024
+    PRODUCT_IMAGE_ALLOWED_TYPES = {'image/png', 'image/jpeg'}
+    PRODUCT_IMAGE_ALLOWED_EXTENSIONS = ('.png', '.jpg', '.jpeg')
 
     class Meta:
         model = Product
         fields = [
-            'code','barcode','name','batch_no','manufacture_date','expiry_date',
-            'category','unit_price','cost_price','tax_percent','reorder_level','is_active'
+            'code','barcode','name','image','batch_no','manufacture_date','expiry_date',
+            'category','unit_price','full_available','half_price','cost_price','tax_percent','reorder_level','is_active'
         ]
         widgets = {
             'code': forms.TextInput(attrs={"class": "form-control", "autofocus": "autofocus", "placeholder": "Unique code (e.g., PEN-001)"}),
             'barcode': forms.TextInput(attrs={"class": "form-control", "placeholder": "EAN-13 / Code128 / custom"}),
             'name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Product name"}),
+            'image': forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/png,image/jpeg"}),
             'batch_no': forms.TextInput(attrs={"class": "form-control", "placeholder": "Batch number"}),
             'manufacture_date': forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             'expiry_date': forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -593,6 +597,8 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
                 "data-placeholder": "Select a category",
             }),
             'unit_price': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "Selling price"}),
+            'full_available': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'half_price': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0.01", "placeholder": "Half price"}),
             'cost_price': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "Cost price"}),
             'tax_percent': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "GST %"}),
             'reorder_level': forms.NumberInput(attrs={"class": "form-control", "min": "0", "placeholder": "Warn at qty"}),
@@ -610,16 +616,30 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
         # types retain their existing behavior of not exposing these fields.
         for field_name in self.PHARMACY_FIELDS:
             self.fields.pop(field_name, None)
+        if self.is_restaurant_tenant:
+            self.fields['unit_price'].label = 'Full Price'
+            self.fields['half_price'].required = False
+        else:
+            self.fields.pop('image', None)
+            self.fields.pop('full_available', None)
+            self.fields.pop('half_price', None)
 
     @property
     def is_pharmacy_tenant(self):
         return bool(self.tenant and self.tenant.business_type == 'pharmacy')
+
+    @property
+    def is_restaurant_tenant(self):
+        return bool(self.tenant and self.tenant.business_type == 'restaurant')
 
     def save(self, commit=True):
         obj = super().save(commit=False)
         if not self.is_pharmacy_tenant:
             obj.batch_no = ''
             obj.expiry_date = None
+        if not self.is_restaurant_tenant:
+            obj.full_available = True
+            obj.half_price = None
         if commit:
             obj.save()
             self.save_m2m()
@@ -636,6 +656,33 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
         if barcode and self.tenant_unique_exists(Product, 'barcode', barcode):
             raise ValidationError("This barcode already exists for this tenant.")
         return barcode
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.is_restaurant_tenant:
+            full_available = cleaned.get('full_available')
+            half_price = cleaned.get('half_price')
+            if half_price is not None and half_price <= 0:
+                self.add_error('half_price', "Half price must be greater than zero.")
+            if not full_available and half_price is None:
+                self.add_error('half_price', "Enter a half price when full portion is not available.")
+        return cleaned
+
+    def clean_image(self):
+        image = self.cleaned_data.get('image')
+        if not image:
+            return image
+        if not self.is_restaurant_tenant:
+            raise ValidationError("Product images are available only for restaurant businesses.")
+        if not hasattr(image, 'content_type'):
+            return image
+        if getattr(image, 'size', 0) > self.PRODUCT_IMAGE_MAX_SIZE:
+            raise ValidationError("Product image must be 2 MB or smaller.")
+        content_type = getattr(image, 'content_type', '')
+        name = getattr(image, 'name', '').lower()
+        if content_type not in self.PRODUCT_IMAGE_ALLOWED_TYPES or not name.endswith(self.PRODUCT_IMAGE_ALLOWED_EXTENSIONS):
+            raise ValidationError("Upload a PNG or JPG image.")
+        return image
 
 
 class ProductSetForm(TenantModelFormMixin, forms.ModelForm):
@@ -793,7 +840,7 @@ class SiteSettingForm(forms.ModelForm):
         fields = [
             # Org/Bill
             'org_name','org_address','org_phone','org_email',
-            'bill_title','bill_footer','bill_tax_inclusive','printer_type','payment_qr',
+            'bill_title','bill_footer','bill_tax_inclusive','restaurant_menu_tax_percent','printer_type','payment_qr',
             # SMS
             'sms_enabled','sms_provider','sms_api_key','sms_sender',
             # Calls
@@ -808,6 +855,7 @@ class SiteSettingForm(forms.ModelForm):
             'bill_title': forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g., TAX INVOICE"}),
             'bill_footer': forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Footer note on invoices"}),
             'bill_tax_inclusive': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'restaurant_menu_tax_percent': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "max": "100", "placeholder": "e.g. 5"}),
             'payment_qr': forms.ClearableFileInput(attrs={
                 "class": "form-control", "accept": "image/png,image/jpeg,image/webp",
             }),
@@ -833,6 +881,20 @@ class SiteSettingForm(forms.ModelForm):
             'call_token': forms.TextInput(attrs={"class": "form-control", "placeholder": "Auth token"}),
             'call_from': forms.TextInput(attrs={"class": "form-control", "placeholder": "Caller ID / From number"}),
         }
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        self.tenant = tenant
+        super().__init__(*args, **kwargs)
+        if not (self.tenant and self.tenant.business_type == 'restaurant'):
+            self.fields.pop('restaurant_menu_tax_percent', None)
+
+    def clean_restaurant_menu_tax_percent(self):
+        value = self.cleaned_data.get('restaurant_menu_tax_percent')
+        if value is None:
+            return value
+        if value < Decimal('0') or value > Decimal('100'):
+            raise ValidationError('Tax percentage must be between 0 and 100.')
+        return value
 
     def clean_payment_qr(self):
         image = self.cleaned_data.get('payment_qr')
