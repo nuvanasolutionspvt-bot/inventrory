@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% load widget_tweaks %}
+{% block title %}Restaurant POS — Nuvana POS{% endblock %}
+{% block breadcrumb %}Restaurant / POS{% endblock %}
+
+{% block content %}
+<style>
+  .restaurant-pos .category-strip{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.5rem}
+  .restaurant-pos .category-btn{white-space:nowrap}
+  .restaurant-pos .menu-card{cursor:pointer;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+  .restaurant-pos .menu-card:hover{transform:translateY(-2px);border-color:var(--brand-2);box-shadow:0 5px 16px rgba(20,38,58,.09)}
+  .restaurant-pos .menu-card:active{transform:scale(.98)}
+  .restaurant-pos .card-add-area{border:0;background:transparent;text-align:left;width:100%;padding:0;color:inherit}
+  .restaurant-pos .menu-image{width:100%;height:110px;object-fit:cover;border-radius:.7rem .7rem 0 0;display:block}
+  .restaurant-pos .card-qty{border-top:1px solid var(--card-border);padding:.55rem .7rem;display:flex;align-items:center;justify-content:space-between}
+  .restaurant-pos .card-qty .qty-control button{background:#f8f9fc}
+  .restaurant-pos .portion-selector{display:flex;gap:1rem;padding:.55rem .7rem;border-top:1px solid var(--card-border);background:#fff}
+  .restaurant-pos .selected-price{font-weight:700;color:var(--brand-2);margin-top:.35rem}
+  .restaurant-pos .cart-panel{position:sticky;top:1rem}
+  .restaurant-pos .cart-row{border-bottom:1px solid var(--card-border);padding:.75rem 0}
+  .restaurant-pos .qty-control{display:inline-flex;align-items:center;border:1px solid var(--card-border);border-radius:.5rem;overflow:hidden}
+  .restaurant-pos .qty-control button{border:0;background:#fff;width:2rem;height:2rem;color:var(--brand-2);font-weight:700}
+  .restaurant-pos .qty-control span{min-width:1.8rem;text-align:center;font-weight:600}
+  @media(max-width:991.98px){.restaurant-pos .cart-panel{position:static}}
+</style>
+
+<form method="post" id="restaurantPosForm" class="restaurant-pos" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="items_json" id="items_json" value="{{ items_json|default:'[]'|escape }}">
+  <input type="hidden" name="is_return" value="">
+  <div class="row g-4">
+    <section class="col-12 col-lg-8">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div><h1 class="h3 mb-1">{% if editing %}Edit Bill INV-{{ sale.id }}{% else %}Restaurant Billing{% endif %}</h1><p class="text-muted mb-0">Choose a category, then tap an item to add it.</p></div>
+        <div class="input-group" style="max-width:280px"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span><input id="menuSearch" class="form-control" type="search" placeholder="Search menu"></div>
+      </div>
+      <div class="category-strip mb-3">
+        <button type="button" class="btn btn-primary category-btn" data-category="all">All</button>
+        {% for category in restaurant_categories %}<button type="button" class="btn btn-outline-primary category-btn" data-category="{{ category.id }}">{{ category.name }}</button>{% endfor %}
+      </div>
+      <div id="menuGrid" class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-3">
+        {% for product in products %}
+        <div class="col menu-item" data-category="{{ product.category_id|default:'' }}" data-name="{{ product.name|lower }}">
+          <article class="card menu-card h-100 w-100" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.unit_price }}" data-half-price="{{ product.half_price|default:'' }}" data-full-available="{{ product.full_available|yesno:'true,false' }}" data-tax="{{ product.tax_percent }}">
+            <button type="button" class="card-add-area add-item" aria-label="Add {{ product.name }}">
+              {% if product.name == 'Crispy Chicken' %}<img class="menu-image" src="/media/items/Crispy%20Chicken.jpg" alt="Crispy Chicken" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Schezwan' %}<img class="menu-image" src="/media/items/Chicken%20Schezwan.webp" alt="Chicken Schezwan" loading="lazy">{% endif %}
+              {% if product.name == 'Dragon Chicken' %}<img class="menu-image" src="/media/items/Dragon%20Chicken.avif" alt="Dragon Chicken" loading="lazy">{% endif %}
+              {% if product.name == 'Chilli Chicken' %}<img class="menu-image" src="/media/items/chilli%20chicken.avif" alt="Chilli Chicken" loading="lazy">{% endif %}
+              {% if product.name == 'Tandoori Chicken' %}<img class="menu-image" src="/media/items/Tandoori%20Chicken.webp" alt="Tandoori Chicken" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Tikka' %}<img class="menu-image" src="/media/items/Chicken%20Tikka.webp" alt="Chicken Tikka" loading="lazy">{% endif %}
+              {% if product.name == 'Butter Chicken' %}<img class="menu-image" src="/media/items/Butter%20Chicken.webp" alt="Butter Chicken" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Lapeta' %}<img class="menu-image" src="/media/items/Chicken%20Lapeta.webp" alt="Chicken Lapeta" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Handi' %}<img class="menu-image" src="/media/items/Chicken%20Handi.webp" alt="Chicken Handi" loading="lazy">{% endif %}
+              {% if product.name == 'Murgh Musallam' %}<img class="menu-image" src="/media/items/Murgh%20Musallam.webp" alt="Murgh Musallam" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Maratha' %}<img class="menu-image" src="/media/items/Chicken%20Maratha.webp" alt="Chicken Maratha" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Patiala' %}<img class="menu-image" src="/media/items/Chicken%20Patiala.webp" alt="Chicken Patiala" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Angara' %}<img class="menu-image" src="/media/items/Chicken%20Angara.webp" alt="Chicken Angara" loading="lazy">{% endif %}
+              {% if product.name == 'Kadhai Chicken' %}<img class="menu-image" src="/media/items/Kadhai%20Chicken.webp" alt="Kadhai Chicken" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Kolhapuri' %}<img class="menu-image" src="/media/items/Chicken%20Kolhapuri.webp" alt="Chicken Kolhapuri" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Hyderabadi' %}<img class="menu-image" src="/media/items/Chicken%20Hyderabadi.webp" alt="Chicken Hyderabadi" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Chatpata' %}<img class="menu-image" src="/media/items/Chicken%20Chatpata.webp" alt="Chicken Chatpata" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Mughlai' %}<img class="menu-image" src="/media/items/Chicken%20Mughlai.webp" alt="Chicken Mughlai" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Curry' %}<img class="menu-image" src="/media/items/Chicken%20Curry.webp" alt="Chicken Curry" loading="lazy">{% endif %}
+              {% if product.name == 'Chapati' %}<img class="menu-image" src="/media/items/chapati.webp" alt="Chapati" loading="lazy">{% endif %}
+              {% if product.name == 'Lacchha Paratha' %}<img class="menu-image" src="/media/items/Lacchha%20Paratha.webp" alt="Lacchha Paratha" loading="lazy">{% endif %}
+              {% if product.name == 'Garlic Naan' %}<img class="menu-image" src="/media/items/Garlic%20Naan.webp" alt="Garlic Naan" loading="lazy">{% endif %}
+              {% if product.name == 'Tandoori Roti' %}<img class="menu-image" src="/media/items/Tandoori%20Roti.webp" alt="Tandoori Roti" loading="lazy">{% endif %}
+              {% if product.name == 'Butter Naan' %}<img class="menu-image" src="/media/items/Butter%20nan.jpeg" alt="Butter Naan" loading="lazy">{% endif %}
+              {% if product.name == 'Plain Roti' %}<img class="menu-image" src="/media/items/plain%20Roti.webp" alt="Plain Roti" loading="lazy">{% endif %}
+              {% if product.name == 'Veg Biryani' %}<img class="menu-image" src="/media/items/Veg%20Biryani.webp" alt="Veg Biryani" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Biryani' %}<img class="menu-image" src="/media/items/Chicken%20Biryani.webp" alt="Chicken Biryani" loading="lazy">{% endif %}
+              {% if product.name == 'Mutton Biryani' %}<img class="menu-image" src="/media/items/Mutton%20Biryani.webp" alt="Mutton Biryani" loading="lazy">{% endif %}
+              {% if product.name == 'Jeera Rice' %}<img class="menu-image" src="/media/items/Rice.webp" alt="Jeera Rice" loading="lazy">{% endif %}
+              {% if product.name == 'Tahari' %}<img class="menu-image" src="/media/items/Tahari.jpg" alt="Tahari" loading="lazy">{% endif %}
+              {% if product.name == 'Veg Thali' %}<img class="menu-image" src="/media/items/Veg%20Thali.webp" alt="Veg Thali" loading="lazy">{% endif %}
+              {% if product.name == 'Mixed Veg Curry' %}<img class="menu-image" src="/media/items/Mixed%20Veg%20Curry.webp" alt="Mixed Veg Curry" loading="lazy">{% endif %}
+              {% if product.name == 'Non-Veg Thali' %}<img class="menu-image" src="/media/items/Non-Veg%20Thali.webp" alt="Non-Veg Thali" loading="lazy">{% endif %}
+              {% if product.name == 'Paneer Tikka' %}<img class="menu-image" src="/media/items/Paneer%20Tikka.webp" alt="Paneer Tikka" loading="lazy">{% endif %}
+              {% if product.name == 'Veg Spring Roll' %}<img class="menu-image" src="/media/items/Veg%20Spring%20Roll.webp" alt="Veg Spring Roll" loading="lazy">{% endif %}
+              {% if product.name == 'Dal Tadka' %}<img class="menu-image" src="/media/items/Dal%20Tadka.webp" alt="Dal Tadka" loading="lazy">{% endif %}
+              {% if product.name == 'Paneer Butter Masala' %}<img class="menu-image" src="/media/items/Paneer%20Butter%20Masala.webp" alt="Paneer Butter Masala" loading="lazy">{% endif %}
+              {% if product.name == 'Aloo Tikki Burger' %}<img class="menu-image" src="/media/items/Aloo%20Tikki%20Burger.webp" alt="Aloo Tikki Burger" loading="lazy">{% endif %}
+              {% if product.name == 'Chicken Burger' %}<img class="menu-image" src="/media/items/Chicken%20Burger.webp" alt="Chicken Burger" loading="lazy">{% endif %}
+              {% if product.name == 'Veg Pizza' %}<img class="menu-image" src="/media/items/Veg%20Pizza.webp" alt="Veg Pizza" loading="lazy">{% endif %}
+              {% if product.name == 'French Fries' %}<img class="menu-image" src="/media/items/French%20Fries.webp" alt="French Fries" loading="lazy">{% endif %}
+              {% if product.name == 'Masala Chai' %}<img class="menu-image" src="/media/items/Masala%20Chai.webp" alt="Masala Chai" loading="lazy">{% endif %}
+              {% if product.name == 'Cold Coffee' %}<img class="menu-image" src="/media/items/Cold%20Coffee.webp" alt="Cold Coffee" loading="lazy">{% endif %}
+              {% if product.name == 'Fresh Lime Soda' %}<img class="menu-image" src="/media/items/Fresh%20Lime%20Soda.webp" alt="Fresh Lime Soda" loading="lazy">{% endif %}
+              {% if product.name == 'Gulab Jamun' %}<img class="menu-image" src="/media/items/Gulab%20Jamun.webp" alt="Gulab Jamun" loading="lazy">{% endif %}
+              {% if product.name == 'Ice Cream' %}<img class="menu-image" src="/media/items/Ice%20Cream.webp" alt="Ice Cream" loading="lazy">{% endif %}
+              {% if product.name == 'Chocolate Brownie' %}<img class="menu-image" src="/media/items/Chocolate%20Brownie.webp" alt="Chocolate Brownie" loading="lazy">{% endif %}
+              <div class="card-body p-3"><div class="small text-muted mb-1">{{ product.category.name|default:'Menu' }}</div><div class="fw-semibold">{{ product.name }}</div><div class="selected-price">₹<span class="selected-price-value">{% if product.full_available %}{{ product.unit_price|floatformat:2 }}{% else %}{{ product.half_price|floatformat:2 }}{% endif %}</span></div></div>
+            </button>
+            <div class="portion-selector">
+              {% if product.full_available %}<div class="form-check"><input class="form-check-input portion-radio" type="radio" name="portion_{{ product.id }}" id="pos_full_{{ product.id }}" value="full" checked><label class="form-check-label" for="pos_full_{{ product.id }}">Full</label></div>{% endif %}
+              {% if product.half_price %}<div class="form-check"><input class="form-check-input portion-radio" type="radio" name="portion_{{ product.id }}" id="pos_half_{{ product.id }}" value="half" {% if not product.full_available %}checked{% endif %}><label class="form-check-label" for="pos_half_{{ product.id }}">Half</label></div>{% endif %}
+            </div>
+            <div class="card-qty"><span class="small text-muted selected-portion-label">{% if product.full_available %}Full{% else %}Half{% endif %}</span><div class="qty-control"><button type="button" class="card-minus">−</button><span class="card-qty-value">0</span><button type="button" class="card-plus">+</button></div></div>
+          </article>
+        </div>
+        {% empty %}<div class="col-12"><div class="card p-5 text-center text-muted">No menu items available. Add items from Restaurant Catalog Setup.</div></div>{% endfor %}
+      </div>
+      <div id="menuEmpty" class="card p-5 text-center d-none"><i class="bi bi-search fs-2 text-muted"></i><div class="mt-2">No matching menu items</div></div>
+    </section>
+
+    <aside class="col-12 col-lg-4">
+      <div class="card shadow-sm cart-panel">
+        <div class="card-header bg-white"><h2 class="h5 mb-0">Current Order <span id="cartCount" class="badge bg-primary ms-1">0</span></h2></div>
+        <div class="card-body">
+          <div id="cartEmpty" class="text-center text-muted py-4"><i class="bi bi-basket fs-2 d-block mb-2"></i>No items added</div>
+          <div id="cartItems"></div>
+          <hr>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label small">Date</label>{{ form.date|add_class:'form-control' }}</div>
+            <div class="col-6"><label class="form-label small">Discount</label>{{ form.discount|add_class:'form-control'|attr:'min:0' }}</div>
+            <div class="col-12"><label class="form-label small">Customer</label>{{ form.customer|add_class:'form-select' }}</div>
+            <div class="col-6"><label class="form-label small">Payment</label>{{ form.payment_method|add_class:'form-select' }}</div>
+            <div class="col-6"><label class="form-label small">Paid Amount</label>{{ form.paid_amount|add_class:'form-control'|attr:'min:0' }}</div>
+          </div>
+          {% if form.errors %}<div class="alert alert-danger small">Please correct the billing details.</div>{% endif %}
+          <div class="d-flex justify-content-between mb-1"><span>Subtotal</span><strong>₹<span id="subtotal">0.00</span></strong></div>
+          <div class="d-flex justify-content-between mb-1"><span>Tax</span><strong>₹<span id="tax">0.00</span></strong></div>
+          <div class="d-flex justify-content-between h5 mt-3"><span>Total</span><strong>₹<span id="grandTotal">0.00</span></strong></div>
+          <button id="completeSale" class="btn btn-primary w-100 mt-2" disabled><i class="bi bi-check-circle me-1"></i>{% if editing %}Update &amp; Print Bill{% else %}Complete Sale{% endif %}</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</form>
+
+<script>
+(() => {
+  const cart = new Map(), grid = document.getElementById('menuGrid'), search = document.getElementById('menuSearch');
+  const saved = document.getElementById('items_json').value;
+  try { JSON.parse(saved || '[]').forEach(x => {const portion=x.portion||'full',key=String(x.product_id)+':'+portion;cart.set(key,{key,id:String(x.product_id),portion,name:x.name||'Item',price:Number(x.unit_price||0),tax:Number(x.tax_percent||0),qty:Number(x.qty||1)})}); } catch(e) {}
+  let category='all';
+  function render(){let subtotal=0,tax=0,count=0,html='';cart.forEach(item=>{const line=item.price*item.qty;subtotal+=line;tax+=line*item.tax/100;count+=item.qty;html+=`<div class="cart-row d-flex justify-content-between gap-2"><div class="flex-grow-1"><div class="fw-semibold">${escapeHtml(item.name)}</div><div class="small text-muted">₹${item.price.toFixed(2)} each</div></div><div class="text-end"><div class="qty-control"><button type="button" data-action="minus" data-key="${item.key}" aria-label="Remove one">−</button><span>${item.qty}</span><button type="button" data-action="plus" data-key="${item.key}" aria-label="Add one">+</button></div><div class="small fw-semibold mt-1">₹${line.toFixed(2)}</div></div></div>`});
+    document.getElementById('cartItems').innerHTML=html;document.querySelectorAll('.menu-card').forEach(card=>{const portion=selectedPortion(card);card.querySelector('.card-qty-value').textContent=cart.get(card.dataset.id+':'+portion)?.qty||0});document.getElementById('cartEmpty').classList.toggle('d-none',cart.size>0);document.getElementById('cartCount').textContent=count;document.getElementById('subtotal').textContent=subtotal.toFixed(2);document.getElementById('tax').textContent=tax.toFixed(2);const discount=Number(document.getElementById('id_discount').value||0);const total=Math.max(0,subtotal+tax-discount);document.getElementById('grandTotal').textContent=total.toFixed(2);document.getElementById('id_paid_amount').value=total.toFixed(2);document.getElementById('completeSale').disabled=!cart.size;document.getElementById('items_json').value=JSON.stringify([...cart.values()].map(x=>({kind:'product',product_id:x.id,portion:x.portion,qty:x.qty,unit_price:x.price})));
+  }
+  function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+  function selectedPortion(card){return card.querySelector('.portion-radio:checked')?.value||'full'}
+  function updateCardPortion(card){const portion=selectedPortion(card),price=portion==='half'?Number(card.dataset.halfPrice):Number(card.dataset.price);card.querySelector('.selected-price-value').textContent=price.toFixed(2);card.querySelector('.selected-portion-label').textContent=portion==='half'?'Half':'Full';render()}
+  function filter(){let shown=0;document.querySelectorAll('.menu-item').forEach(el=>{const yes=(category==='all'||el.dataset.category===category)&&el.dataset.name.includes(search.value.trim().toLowerCase());el.classList.toggle('d-none',!yes);if(yes)shown++});document.getElementById('menuEmpty').classList.toggle('d-none',shown>0);grid.classList.toggle('d-none',shown===0)}
+  function changeCard(card,portion,amount){const id=card.dataset.id,key=id+':'+portion,item=cart.get(key),price=portion==='half'?Number(card.dataset.halfPrice):Number(card.dataset.price);if(item){item.qty+=amount;if(item.qty<=0)cart.delete(key)}else if(amount>0)cart.set(key,{key,id,portion,name:card.dataset.name+' ('+(portion==='half'?'Half':'Full')+')',price,tax:Number(card.dataset.tax),qty:1});render()}
+  document.querySelectorAll('.menu-card').forEach(card=>{card.querySelector('.add-item').addEventListener('click',()=>changeCard(card,selectedPortion(card),1));card.querySelector('.card-plus').addEventListener('click',()=>changeCard(card,selectedPortion(card),1));card.querySelector('.card-minus').addEventListener('click',()=>changeCard(card,selectedPortion(card),-1));card.querySelectorAll('.portion-radio').forEach(radio=>radio.addEventListener('change',()=>updateCardPortion(card)))});
+  document.getElementById('cartItems').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const item=cart.get(b.dataset.key);if(b.dataset.action==='plus')item.qty++;else if(--item.qty<=0)cart.delete(b.dataset.key);render()});
+  document.querySelectorAll('.category-btn').forEach(btn=>btn.addEventListener('click',()=>{category=btn.dataset.category;document.querySelectorAll('.category-btn').forEach(x=>{x.classList.toggle('btn-primary',x===btn);x.classList.toggle('btn-outline-primary',x!==btn)});filter()}));
+  search.addEventListener('input',filter);document.getElementById('id_discount').addEventListener('input',render);
+  document.getElementById('restaurantPosForm').addEventListener('submit',e=>{if(!cart.size){e.preventDefault();return}document.getElementById('completeSale').disabled=true});render();
+})();
+</script>
+{% endblock %}

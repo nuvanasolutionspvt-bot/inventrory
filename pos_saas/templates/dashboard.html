@@ -71,6 +71,7 @@
   </div>
 
   <!-- KPI: Low Stock -->
+  {% if request.tenant.business_type != 'restaurant' %}
   <div class="col-md-4">
     <div class="card shadow-sm h-100 kpi-card">
       <div class="card-body d-flex align-items-center gap-3">
@@ -159,6 +160,7 @@
       </div>
     </a>
   </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -236,6 +238,7 @@
 </div>
 
 <!-- Low stock details -->
+{% if request.tenant.business_type != 'restaurant' %}
 <div class="card shadow-sm mt-4">
   <div class="card-header bg-white d-flex justify-content-between align-items-center">
     <h5 class="m-0 card-section-title">Low Stock Details</h5>
@@ -284,6 +287,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- Top Selling & Top Customers -->
 <div class="row g-3 mt-1">
@@ -393,11 +397,11 @@
           <i class="bi bi-box-seam me-2"></i> Products
         </a>
       </div>
-      <div class="col">
+      {% if request.tenant.business_type != 'restaurant' %}<div class="col">
         <a href="{% url 'purchase_create' %}" class="btn btn-outline-success w-100 py-3">
           <i class="bi bi-truck me-2"></i> New Purchase
         </a>
-      </div>
+      </div>{% endif %}
       <div class="col">
         <a href="{% url 'sales_list' %}" class="btn btn-outline-dark w-100 py-3">
           <i class="bi bi-receipt me-2"></i> Sales List
@@ -408,11 +412,11 @@
           <i class="bi bi-upc-scan me-2"></i> Print Barcodes
         </a>
       </div>
-      <div class="col">
+      {% if request.tenant.business_type != 'restaurant' %}<div class="col">
         <a href="{% url 'stock_add' %}" class="btn btn-outline-primary w-100 py-3">
           <i class="bi bi-plus-square-dotted me-2"></i> Add Stock
         </a>
-      </div>
+      </div>{% endif %}
       <div class="col">
         <a href="{% url 'supplier_list' %}" class="btn btn-outline-secondary w-100 py-3">
           <i class="bi bi-people me-2"></i> Suppliers
@@ -435,10 +439,10 @@
   <div class="card-body">
     <ol class="mb-0">
       <li>Create or import <b>Products</b> and set <i>Unit Price, Cost, Tax%</i>.</li>
-      <li>Load inventory via <b>Purchase</b> (recommended) or quick <b>Add Stock</b>.</li>
+      {% if request.tenant.business_type != 'restaurant' %}<li>Load inventory via <b>Purchase</b> (recommended) or quick <b>Add Stock</b>.</li>{% endif %}
       <li>Use <b>POS</b> to sell/return; scan barcode or search by code/name.</li>
       <li>Print <b>Barcode labels</b> (A4 grids; Code128 / EAN-13).</li>
-      <li>Review <b>Sales</b>, <b>Stock</b>, <b>Purchase</b> & <b>Credit</b> reports; download PDFs.</li>
+      <li>Review <b>Sales</b>{% if request.tenant.business_type != 'restaurant' %}, <b>Stock</b>, <b>Purchase</b>{% endif %} & <b>Credit</b> reports; download PDFs.</li>
     </ol>
   </div>
 </div>

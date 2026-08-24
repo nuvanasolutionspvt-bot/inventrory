@@ -318,6 +318,18 @@ def _line_from_pos_item(item, tenant):
     product = get_object_or_404(Product, tenant=tenant, pk=item.get('product_id'))
     if tenant.business_type == 'pharmacy':
         raise ValidationError(f'Select a batch for {product.code} - {product.name}.')
+    if tenant.business_type == 'restaurant':
+        # Menu prices are authoritative; never trust a browser-submitted price.
+        portion = str(item.get('portion') or 'full').lower()
+        if portion == 'half':
+            if product.half_price is None:
+                raise ValidationError(f'Half portion is not available for {product.name}.')
+            unit_price = product.half_price
+        else:
+            if not product.full_available:
+                raise ValidationError(f'Full portion is not available for {product.name}.')
+            portion = 'full'
+            unit_price = product.unit_price
     return {
         'kind': 'product',
         'product': product,
@@ -327,7 +339,7 @@ def _line_from_pos_item(item, tenant):
         'unit_price': unit_price,
         'tax_percent': product.tax_percent or 0,
         'description': f"{product.code} - {product.name}",
-        'details': '',
+        'details': portion.title() if tenant.business_type == 'restaurant' else '',
         'components': None,
         'source_label': f"direct item {product.code} - {product.name}",
     }
@@ -529,11 +541,197 @@ def register(request):
                 messages.success(request, f"Tenant '{tenant.name}' created. Your 7-day free trial is active.")
             else:
                 messages.success(request, f"Tenant '{tenant.name}' created. Complete payment to activate the selected plan.")
+            if tenant.business_type == 'restaurant':
+                return redirect('restaurant_catalog_setup')
             return redirect('subscription')
     else:
         form = TenantRegistrationForm()
 
     return render(request, 'auth/register.html', {'form': form})
+
+
+RESTAURANT_CATALOG = (
+    ('veg-thali', 'Veg Thali', 'Veg', Decimal('5.00')),
+    ('mixed-veg-curry', 'Mixed Veg Curry', 'Veg', Decimal('5.00')),
+    ('non-veg-thali', 'Non-Veg Thali', 'Non-Veg', Decimal('5.00')),
+    ('tandoori-chicken', 'Tandoori Chicken', 'Non-Veg Starters', Decimal('5.00')),
+    ('veg-paneer-tikka', 'Paneer Tikka', 'Veg Starters', Decimal('5.00')),
+    ('veg-spring-roll', 'Veg Spring Roll', 'Veg Starters', Decimal('5.00')),
+    ('chicken-tikka', 'Chicken Tikka', 'Non-Veg Starters', Decimal('5.00')),
+    ('crispy-chicken', 'Crispy Chicken', 'Non-Veg Starters', Decimal('5.00')),
+    ('chicken-schezwan', 'Chicken Schezwan', 'Non-Veg Starters', Decimal('5.00')),
+    ('dragon-chicken', 'Dragon Chicken', 'Non-Veg Starters', Decimal('5.00')),
+    ('chilli-chicken', 'Chilli Chicken', 'Non-Veg Starters', Decimal('5.00')),
+    ('dal-tadka', 'Dal Tadka', 'Veg Main Course', Decimal('5.00')),
+    ('paneer-butter-masala', 'Paneer Butter Masala', 'Veg Main Course', Decimal('5.00')),
+    ('butter-chicken', 'Butter Chicken', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-curry', 'Chicken Curry', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-lapeta', 'Chicken Lapeta', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-handi', 'Chicken Handi', 'Non-Veg Main Course', Decimal('5.00')),
+    ('murgh-musallam', 'Murgh Musallam', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-maratha', 'Chicken Maratha', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-patiala', 'Chicken Patiala', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-angara', 'Chicken Angara', 'Non-Veg Main Course', Decimal('5.00')),
+    ('kadhai-chicken', 'Kadhai Chicken', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-kolhapuri', 'Chicken Kolhapuri', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-hyderabadi', 'Chicken Hyderabadi', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-chatpata', 'Chicken Chatpata', 'Non-Veg Main Course', Decimal('5.00')),
+    ('chicken-mughlai', 'Chicken Mughlai', 'Non-Veg Main Course', Decimal('5.00')),
+    ('veg-biryani', 'Veg Biryani', 'Thari Biryani Rice', Decimal('5.00')),
+    ('chicken-biryani', 'Chicken Biryani', 'Thari Biryani Rice', Decimal('5.00')),
+    ('mutton-biryani', 'Mutton Biryani', 'Thari Biryani Rice', Decimal('5.00')),
+    ('jeera-rice', 'Jeera Rice', 'Thari Biryani Rice', Decimal('5.00')),
+    ('tahari', 'Tahari', 'Thari Biryani Rice', Decimal('5.00')),
+    ('plain-roti', 'Plain Roti', 'Roti & Bread', Decimal('5.00')),
+    ('chapati', 'Chapati', 'Roti & Bread', Decimal('5.00')),
+    ('lacchha-paratha', 'Lacchha Paratha', 'Roti & Bread', Decimal('5.00')),
+    ('garlic-naan', 'Garlic Naan', 'Roti & Bread', Decimal('5.00')),
+    ('tandoori-roti', 'Tandoori Roti', 'Roti & Bread', Decimal('5.00')),
+    ('butter-naan', 'Butter Naan', 'Roti & Bread', Decimal('5.00')),
+    ('aloo-tikki-burger', 'Aloo Tikki Burger', 'Fast Food', Decimal('5.00')),
+    ('chicken-burger', 'Chicken Burger', 'Fast Food', Decimal('5.00')),
+    ('veg-pizza', 'Veg Pizza', 'Fast Food', Decimal('5.00')),
+    ('french-fries', 'French Fries', 'Fast Food', Decimal('5.00')),
+    ('masala-chai', 'Masala Chai', 'Beverages', Decimal('5.00')),
+    ('cold-coffee', 'Cold Coffee', 'Beverages', Decimal('5.00')),
+    ('fresh-lime-soda', 'Fresh Lime Soda', 'Beverages', Decimal('5.00')),
+    ('gulab-jamun', 'Gulab Jamun', 'Desserts', Decimal('5.00')),
+    ('ice-cream', 'Ice Cream', 'Desserts', Decimal('5.00')),
+    ('brownie', 'Chocolate Brownie', 'Desserts', Decimal('5.00')),
+)
+
+RESTAURANT_CATEGORIES = (
+    'Veg', 'Non-Veg', 'Veg Starters', 'Non-Veg Starters',
+    'Veg Main Course', 'Non-Veg Main Course', 'Thari Biryani Rice',
+    'Roti & Bread', 'Fast Food', 'Beverages', 'Desserts',
+)
+
+
+@login_required
+def restaurant_catalog_setup(request):
+    tenant = _tenant(request)
+    if tenant.business_type != 'restaurant':
+        return redirect('dashboard')
+
+    catalog = [
+        {'id': item_id, 'name': name, 'category': category, 'tax_percent': tax}
+        for item_id, name, category, tax in RESTAURANT_CATALOG
+    ]
+    errors = {}
+    selected_ids = set()
+    half_ids = set()
+    submitted_prices = {}
+    submitted_half_prices = {}
+
+    if request.method == 'POST':
+        catalog_by_id = {item['id']: item for item in catalog}
+        selected_ids = set(request.POST.getlist('selected_items'))
+        half_ids = {
+            item_id for item_id in selected_ids
+            if request.POST.get(f'half_price_{item_id}', '').strip()
+        }
+        selected_ids &= set(catalog_by_id)
+        half_ids &= set(catalog_by_id)
+        chosen_ids = selected_ids | half_ids
+        if not chosen_ids:
+            errors['__all__'] = 'Select at least one menu item to continue.'
+
+        prices = {}
+        half_prices = {}
+        for item_id in chosen_ids:
+            raw_price = request.POST.get(f'price_{item_id}', '').strip()
+            submitted_prices[item_id] = raw_price
+            try:
+                price = Decimal(raw_price)
+                if not price.is_finite() or price <= 0 or price > Decimal('99999999.99'):
+                    raise ValueError
+                prices[item_id] = price
+            except (ArithmeticError, ValueError):
+                errors[item_id] = 'Enter a full price greater than 0.'
+            raw_half_price = request.POST.get(f'half_price_{item_id}', '').strip()
+            submitted_half_prices[item_id] = raw_half_price
+            if raw_half_price:
+                try:
+                    half_price = Decimal(raw_half_price)
+                    if not half_price.is_finite() or half_price <= 0 or half_price > Decimal('99999999.99'):
+                        raise ValueError
+                    half_prices[item_id] = half_price
+                except (ArithmeticError, ValueError):
+                    errors[f'half:{item_id}'] = 'Enter a half price greater than 0.'
+            elif item_id in half_ids:
+                errors[f'half:{item_id}'] = 'Enter a half price greater than 0.'
+
+        if not errors:
+            created_count = 0
+            duplicate_count = 0
+            with transaction.atomic():
+                category_cache = {}
+                for index, item_id in enumerate(chosen_ids, start=1):
+                    item = catalog_by_id[item_id]
+                    existing = Product.objects.filter(tenant=tenant, name__iexact=item['name']).first()
+                    if existing:
+                        existing.full_available = True
+                        existing.unit_price = prices[item_id]
+                        existing.half_price = half_prices.get(item_id)
+                        existing.tax_percent = item['tax_percent']
+                        existing.save(update_fields=['full_available', 'unit_price', 'half_price', 'tax_percent', 'updated_at'])
+                        duplicate_count += 1
+                        continue
+                    category = category_cache.get(item['category'])
+                    if category is None:
+                        category, _ = Category.objects.get_or_create(tenant=tenant, name=item['category'])
+                        category_cache[item['category']] = category
+                    code_base = f"MENU-{item_id.upper()[:48]}"
+                    code = code_base
+                    suffix = 2
+                    while Product.objects.filter(tenant=tenant, code=code).exists():
+                        code = f'{code_base[:59]}-{suffix}'
+                        suffix += 1
+                    Product.objects.create(
+                        tenant=tenant, code=code, name=item['name'], category=category,
+                        unit_price=prices[item_id], full_available=True,
+                        half_price=half_prices.get(item_id),
+                        tax_percent=item['tax_percent'], is_active=True,
+                    )
+                    created_count += 1
+            if created_count:
+                messages.success(
+                    request,
+                    f'{created_count} menu item(s) added to your shop successfully.',
+                    extra_tags='catalog-toast',
+                )
+            elif duplicate_count:
+                messages.info(request, 'Those menu items are already in your shop.')
+            return redirect('pos_sale_create')
+
+    if request.method == 'GET':
+        existing_products = {
+            product.name.casefold(): product
+            for product in Product.objects.filter(tenant=tenant, is_active=True)
+        }
+        for item in catalog:
+            product = existing_products.get(item['name'].casefold())
+            if not product:
+                continue
+            if product.full_available:
+                selected_ids.add(item['id'])
+                submitted_prices[item['id']] = str(product.unit_price)
+            if product.half_price is not None:
+                half_ids.add(item['id'])
+                submitted_half_prices[item['id']] = str(product.half_price)
+
+    for item in catalog:
+        item['selected'] = item['id'] in selected_ids
+        item['half_selected'] = item['id'] in half_ids
+        item['price'] = submitted_prices.get(item['id'], submitted_half_prices.get(item['id'], ''))
+        item['half_price'] = submitted_half_prices.get(item['id'], '')
+        item['error'] = errors.get(item['id'], '')
+        item['half_error'] = errors.get(f"half:{item['id']}", '')
+    return render(request, 'restaurant/catalog_setup.html', {
+        'catalog': catalog,
+        'categories': RESTAURANT_CATEGORIES,
+        'form_error': errors.get('__all__', ''),
+    })
 
 
 @user_passes_test(_company_admin_required, login_url='company_login')
@@ -712,6 +910,50 @@ def subscription_verify(request):
 def dashboard(request):
     tenant = _tenant(request)
     today = date.today()
+
+    if tenant.business_type == 'restaurant':
+        today_sales = Sale.objects.filter(
+            tenant=tenant,
+            date=today,
+            is_return=False,
+        )
+        today_summary = today_sales.aggregate(
+            total=Coalesce(Sum('total'), Value(Decimal('0.00'))),
+            bills=Count('id'),
+        )
+        today_total = today_summary['total'] or Decimal('0.00')
+        today_bills = today_summary['bills'] or 0
+        start_30 = today - timedelta(days=30)
+        top_dishes = (
+            SaleItem.objects
+            .filter(sale__tenant=tenant, sale__is_return=False, sale__date__gte=start_30)
+            .values('product__name')
+            .annotate(
+                total_qty=Coalesce(Sum('qty'), Value(0)),
+                revenue=Coalesce(
+                    Sum(ExpressionWrapper(
+                        F('qty') * F('unit_price'),
+                        output_field=DecimalField(max_digits=14, decimal_places=2),
+                    )),
+                    Value(Decimal('0.00')),
+                ),
+            )
+            .order_by('-total_qty')[:8]
+        )
+        recent_sales = (
+            Sale.objects
+            .filter(tenant=tenant, is_return=False)
+            .select_related('customer')
+            .order_by('-date', '-id')[:8]
+        )
+        return render(request, 'restaurant/dashboard.html', {
+            'today_sales': today_total,
+            'today_bills': today_bills,
+            'average_bill': today_total / today_bills if today_bills else Decimal('0.00'),
+            'menu_items': Product.objects.filter(tenant=tenant, is_active=True).count(),
+            'top_dishes': top_dishes,
+            'recent_sales': recent_sales,
+        })
 
     expiry_kpis = None
     if tenant.business_type == 'pharmacy':
@@ -1615,6 +1857,11 @@ def pos_sale_create(request):
     site_settings = SiteSetting.get(tenant)
     products, product_sets, product_batches = _pos_catalog(tenant)
     is_pharmacy = tenant.business_type == 'pharmacy'
+    is_restaurant = tenant.business_type == 'restaurant'
+    pos_template = 'sales/restaurant_pos.html' if is_restaurant else 'sales/pos.html'
+    restaurant_categories = Category.objects.filter(
+        tenant=tenant, product__is_active=True
+    ).distinct().order_by('name') if is_restaurant else Category.objects.none()
 
     def is_ajax_req(req):
         return req.headers.get('x-requested-with') == 'XMLHttpRequest' or req.POST.get('_ajax') == '1'
@@ -1649,14 +1896,15 @@ def pos_sale_create(request):
                 if is_ajax_req(request):
                     return ajax_error(error_text)
                 messages.error(request, error_text)
-                return render(request, 'sales/pos.html', {
+                return render(request, pos_template, {
                     'form': form, 'products': products, 'product_sets': product_sets,
                     'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                     'items_json': items_json, 'site_settings': site_settings,
+                    'restaurant_categories': restaurant_categories,
                 })
 
             # --- HARD STOCK CHECK (normal sales only) ---
-            if not sale.is_return and not is_pharmacy:
+            if not sale.is_return and not is_pharmacy and not is_restaurant:
                 req_by_pid, labels = _required_stock_for_lines(lines)
 
                 if req_by_pid:
@@ -1681,10 +1929,11 @@ def pos_sale_create(request):
                         if is_ajax_req(request):  # NEW
                             return ajax_error(msg)
                         messages.error(request, msg)
-                        return render(request, 'sales/pos.html', {
+                        return render(request, pos_template, {
                             'form': form, 'products': products, 'product_sets': product_sets, 'items_json': items_json,
                             'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'site_settings': site_settings,
+                            'restaurant_categories': restaurant_categories,
                         })
 
             # --- totals (pre-sign) ---
@@ -1713,10 +1962,11 @@ def pos_sale_create(request):
                         if is_ajax_req(request):  # NEW
                             return ajax_error(msg)
                         messages.error(request, msg)
-                        return render(request, 'sales/pos.html', {
+                        return render(request, pos_template, {
                             'form': form, 'products': products, 'product_sets': product_sets, 'items_json': items_json,
                             'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'site_settings': site_settings,
+                            'restaurant_categories': restaurant_categories,
                         })
 
             # sign & save sale
@@ -1749,6 +1999,7 @@ def pos_sale_create(request):
                     "bill_title": s.bill_title, "bill_footer": s.bill_footer,
                     "bill_tax_inclusive": s.bill_tax_inclusive,
                     "printer_type": s.printer_type,
+                    "payment_qr_url": s.payment_qr.url if s.payment_qr else '',
                 }, request=request)
                 return JsonResponse({
                     'ok': True,
@@ -1763,7 +2014,7 @@ def pos_sale_create(request):
         if is_ajax_req(request):  # NEW
             return ajax_error('Form invalid or no items.', extra={'form_errors': form.errors})
         messages.error(request, 'Form invalid or no items.')
-        return render(request, 'sales/pos.html', {
+        return render(request, pos_template, {
             'form': form,
             'products': products,
             'product_sets': product_sets,
@@ -1771,17 +2022,19 @@ def pos_sale_create(request):
             'is_pharmacy': is_pharmacy,
             'items_json': items_json,
             'site_settings': site_settings,
+            'restaurant_categories': restaurant_categories,
         })
 
     # GET
     form = SaleForm(initial={'date': date.today()}, tenant=tenant)
-    return render(request, 'sales/pos.html', {
+    return render(request, pos_template, {
         'form': form,
         'products': products,
         'product_sets': product_sets,
         'product_batches': product_batches,
         'is_pharmacy': is_pharmacy,
         'site_settings': site_settings,
+        'restaurant_categories': restaurant_categories,
     })
 
 
@@ -1800,6 +2053,7 @@ def invoice_view(request, sale_id):
         "bill_title": s.bill_title, "bill_footer": s.bill_footer,
         "bill_tax_inclusive": s.bill_tax_inclusive,
         "printer_type": s.printer_type,
+        "payment_qr_url": s.payment_qr.url if s.payment_qr else '',
     })
 
 
@@ -2337,6 +2591,11 @@ def sale_update(request, sale_id):
     sale = get_object_or_404(Sale, tenant=tenant, pk=sale_id)
     products, product_sets, product_batches = _pos_catalog(tenant)
     is_pharmacy = tenant.business_type == 'pharmacy'
+    is_restaurant = tenant.business_type == 'restaurant'
+    pos_template = 'sales/restaurant_pos.html' if is_restaurant else 'sales/pos.html'
+    restaurant_categories = Category.objects.filter(
+        tenant=tenant, product__is_active=True
+    ).distinct().order_by('name') if is_restaurant else Category.objects.none()
 
     if request.method == 'POST':
         form = SaleForm(request.POST, instance=sale, tenant=tenant)
@@ -2390,11 +2649,13 @@ def sale_update(request, sale_id):
                     msg = _enforce_credit_or_block(sale.customer, will_add_debit)
                     if msg:
                         messages.error(request, msg)
-                        return render(request, 'sales/pos.html', {
+                        return render(request, pos_template, {
                             'form': form, 'products': products, 'product_sets': product_sets, 'editing': True,
                             'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'sale': sale, 'prefill_items': json.dumps([]),
+                            'items_json': '[]',
                             'site_settings': SiteSetting.get(tenant),
+                            'restaurant_categories': restaurant_categories,
                         })
 
             # Validation has passed; now safely undo and rebuild postings.
@@ -2442,9 +2703,15 @@ def sale_update(request, sale_id):
             row["set_id"] = it.product_set_id
         elif it.product_id:
             row["product_id"] = it.product_id
+            if is_restaurant:
+                portion = 'half' if (it.details or '').strip().lower() == 'half' else 'full'
+                row["portion"] = portion
+                row["name"] = f"{it.product.name} ({portion.title()})"
+                row["tax_percent"] = float(it.tax_percent or 0)
         prefill.append(row)
 
-    return render(request, 'sales/pos.html', {
+    prefill_json = json.dumps(prefill)
+    return render(request, pos_template, {
         'form': form,
         'products': products,
         'product_sets': product_sets,
@@ -2452,8 +2719,10 @@ def sale_update(request, sale_id):
         'is_pharmacy': is_pharmacy,
         'editing': True,
         'sale': sale,
-        'prefill_items': json.dumps(prefill),
+        'prefill_items': prefill_json,
+        'items_json': prefill_json,
         'site_settings': SiteSetting.get(tenant),
+        'restaurant_categories': restaurant_categories,
     })
 
 
@@ -2566,7 +2835,7 @@ def settings_general(request):
     tenant = _tenant(request)
     s = SiteSetting.get(tenant)
     if request.method == 'POST':
-        form = SiteSettingForm(request.POST, instance=s)
+        form = SiteSettingForm(request.POST, request.FILES, instance=s)
         if form.is_valid():
             form.save()
             messages.success(request, 'Settings saved.')

@@ -192,6 +192,8 @@ class Product(TimeStampedModel):
     expiry_date = models.DateField(null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    full_available = models.BooleanField(default=True)
+    half_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     cost_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # per-product GST/VAT%
     reorder_level = models.PositiveIntegerField(default=0)
@@ -653,6 +655,7 @@ class SiteSetting(models.Model):
     bill_footer = models.CharField(max_length=200, blank=True, default='')
     bill_tax_inclusive = models.BooleanField(default=True)
     printer_type = models.CharField(max_length=20, choices=PRINTER_TYPE_CHOICES, default='a4')
+    payment_qr = models.ImageField(upload_to='tenant_qr/%Y/%m/', blank=True, null=True)
 
     # SMS
     sms_enabled  = models.BooleanField(default=False)

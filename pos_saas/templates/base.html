@@ -34,7 +34,7 @@
               </li>
             {% endif %}
 
-            {% if perms.posapp.view_productset %}
+            {% if perms.posapp.view_productset and request.tenant.business_type != 'restaurant' %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'product_set_list' %}">
                   <i class="bi bi-collection me-1"></i>Sets
@@ -42,7 +42,7 @@
               </li>
             {% endif %}
 
-            {% if perms.posapp.can_manage_purchases %}
+            {% if perms.posapp.can_manage_purchases and request.tenant.business_type != 'restaurant' %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'purchase_create' %}">
                   <i class="bi bi-clipboard-plus me-1"></i>Purchase
@@ -54,6 +54,14 @@
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'pos_sale_create' %}">
                   <i class="bi bi-cash-register me-1"></i>POS
+                </a>
+              </li>
+            {% endif %}
+
+            {% if request.tenant.business_type == 'restaurant' and perms.posapp.add_product %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'restaurant_catalog_setup' %}">
+                  <i class="bi bi-journal-plus me-1"></i>Catalog
                 </a>
               </li>
             {% endif %}
@@ -81,15 +89,16 @@
                 </a>
                 <ul class="dropdown-menu shadow-sm">
                   <li><a class="dropdown-item" href="{% url 'sales_report' %}"><i class="bi bi-receipt me-2"></i>Sales Report</a></li>
-                  <li><a class="dropdown-item" href="{% url 'stock_report' %}"><i class="bi bi-box2-heart me-2"></i>Stock Report</a></li>
+                  {% if request.tenant.business_type != 'restaurant' %}<li><a class="dropdown-item" href="{% url 'stock_report' %}"><i class="bi bi-box2-heart me-2"></i>Stock Report</a></li>{% endif %}
                   {% if request.tenant.business_type == 'pharmacy' %}
                   <li><a class="dropdown-item" href="{% url 'batch_stock_report' %}"><i class="bi bi-boxes me-2"></i>Batch Stock Report</a></li>
                   {% endif %}
-                  <li><a class="dropdown-item" href="{% url 'purchase_report' %}"><i class="bi bi-cart-check me-2"></i>Purchase Report</a></li>
+                  {% if request.tenant.business_type != 'restaurant' %}<li><a class="dropdown-item" href="{% url 'purchase_report' %}"><i class="bi bi-cart-check me-2"></i>Purchase Report</a></li>{% endif %}
                 </ul>
               </li>
             {% endif %}
           
+            {% if request.tenant.business_type != 'restaurant' %}
             {% if perms.posapp.can_credit_receive or perms.posapp.can_credit_charge or perms.posapp.can_credit_view %}
               <li class="nav-item dropdown">
                 <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -114,7 +123,9 @@
                 </ul>
               </li>
             {% endif %}
+            {% endif %}
 
+            {% if request.tenant.business_type != 'restaurant' %}
             {% if perms.posapp.can_manage_users or user.is_superuser %}
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -139,6 +150,7 @@
 
               </ul>
             </li>
+            {% endif %}
             {% endif %}
 
           </ul>
@@ -181,6 +193,17 @@
 
     <main class="app-shell py-4">
       {% for message in messages %}
+        {% if 'catalog-toast' in message.tags %}
+        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080">
+          <div class="toast show border-0 shadow" role="status" aria-live="polite" aria-atomic="true" data-bs-delay="4500">
+            <div class="toast-header text-bg-success border-0">
+              <i class="bi bi-check-circle-fill me-2"></i><strong class="me-auto">Menu updated</strong>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body bg-white">{{ message }}</div>
+          </div>
+        </div>
+        {% else %}
         <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
           {% if message.tags == 'success' %}<i class="bi bi-check-circle me-1"></i>{% endif %}
           {% if message.tags == 'warning' %}<i class="bi bi-exclamation-triangle me-1"></i>{% endif %}
@@ -188,6 +211,7 @@
           {{ message }}
           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
+        {% endif %}
       {% endfor %}
 
       {% block content %}{% endblock %}

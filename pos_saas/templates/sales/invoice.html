@@ -134,6 +134,13 @@
   </table>
   {% endif %}
 
+  {% if payment_qr_url %}
+  <div class="payment-qr">
+    <div class="section-title">Scan to Pay</div>
+    <img src="{{ payment_qr_url }}" alt="Payment QR code">
+  </div>
+  {% endif %}
+
   <!-- Footer -->
   <div class="invoice-footer">
     <p>Thank you for your business.<br>
@@ -198,6 +205,11 @@
   color: #111;
   line-height: 1.22;
 }
+
+.payment-qr { text-align:center; margin:14px 0; page-break-inside:avoid; }
+.payment-qr img { width:120px; height:120px; object-fit:contain; }
+.invoice-thermal_58 .payment-qr img { width:100px; height:100px; }
+.invoice-thermal_80 .payment-qr img { width:110px; height:110px; }
 
 .invoice-a4 {
   min-height: 260mm;

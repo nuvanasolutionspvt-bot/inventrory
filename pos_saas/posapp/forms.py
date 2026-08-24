@@ -793,7 +793,7 @@ class SiteSettingForm(forms.ModelForm):
         fields = [
             # Org/Bill
             'org_name','org_address','org_phone','org_email',
-            'bill_title','bill_footer','bill_tax_inclusive','printer_type',
+            'bill_title','bill_footer','bill_tax_inclusive','printer_type','payment_qr',
             # SMS
             'sms_enabled','sms_provider','sms_api_key','sms_sender',
             # Calls
@@ -808,6 +808,9 @@ class SiteSettingForm(forms.ModelForm):
             'bill_title': forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g., TAX INVOICE"}),
             'bill_footer': forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Footer note on invoices"}),
             'bill_tax_inclusive': forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            'payment_qr': forms.ClearableFileInput(attrs={
+                "class": "form-control", "accept": "image/png,image/jpeg,image/webp",
+            }),
             'printer_type': forms.Select(attrs={
                 "class": "form-select js-enhance-select",
                 "data-placeholder": "Select printer type",
@@ -830,6 +833,12 @@ class SiteSettingForm(forms.ModelForm):
             'call_token': forms.TextInput(attrs={"class": "form-control", "placeholder": "Auth token"}),
             'call_from': forms.TextInput(attrs={"class": "form-control", "placeholder": "Caller ID / From number"}),
         }
+
+    def clean_payment_qr(self):
+        image = self.cleaned_data.get('payment_qr')
+        if image and getattr(image, 'size', 0) > 2 * 1024 * 1024:
+            raise ValidationError('QR image must be 2 MB or smaller.')
+        return image
 
 # ---------------------------
 # Credit System – new utility forms
