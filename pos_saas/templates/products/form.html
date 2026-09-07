@@ -32,16 +32,21 @@
             <div class="fw-semibold">Identity</div>
           </div>
           <div class="row g-3">
+            {% if form.code.is_hidden %}
+              {{ form.code }}
+            {% else %}
             <div class="col-md-3">
               <label class="form-label">Code <span class="text-danger">*</span></label>
-              {{ form.code}}
+              {{ form.code }}
               {% if form.code.errors %}
                 <div class="invalid-feedback">{{ form.code.errors|striptags }}</div>
               {% else %}
                 <div class="form-text">Unique SKU to identify the product.</div>
               {% endif %}
             </div>
+            {% endif %}
 
+            {% if show_barcode %}
             <div class="col-md-3">
               <label class="form-label">Barcode</label>
               {{ form.barcode }}
@@ -52,6 +57,7 @@
               {% endif %}
             </div>
 
+            {% endif %}
             <div class="col-md-6">
               <label class="form-label">Name <span class="text-danger">*</span></label>
               {{ form.name }}

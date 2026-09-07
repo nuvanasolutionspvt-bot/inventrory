@@ -18,7 +18,6 @@
         <a href="{% url 'product_set_list' %}" class="btn btn-outline-primary">
           <i class="bi bi-collection me-1"></i> Sets
         </a>
-        {% endif %}
         <a href="{% url 'product_barcodes' %}" class="btn btn-outline-dark">
           <i class="bi bi-upc-scan me-1"></i> Print Barcodes
         </a>
@@ -30,6 +29,7 @@
         <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importCsvModal">
           <i class="bi bi-filetype-csv me-1"></i> Import CSV
         </button>
+        {% endif %}
 
         <a href="{% url 'product_create' %}" class="btn btn-success">
           <i class="bi bi-plus-circle me-1"></i> New Product

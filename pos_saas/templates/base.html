@@ -125,7 +125,6 @@
             {% endif %}
             {% endif %}
 
-            {% if request.tenant.business_type != 'restaurant' %}
             {% if perms.posapp.can_manage_users or user.is_superuser %}
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -133,24 +132,13 @@
               </a>
               <ul class="dropdown-menu shadow-sm">
                 <li><a class="dropdown-item" href="{% url 'security_users' %}"><i class="bi bi-person-gear me-2"></i>Users</a></li>
-                {% if perms.posapp.view_supplier %}
-                  <li><a class="dropdown-item" href="{% url 'supplier_list' %}">
-                    <i class="bi bi-truck me-2"></i>Suppliers</a>
-                  </li>
-                {% endif %}
   
-              {% if perms.posapp.view_customer %}
-              <li><a class="dropdown-item" href="{% url 'customer_list' %}">
-                <i class="bi bi-people me-2"></i>Customers</a>
-              </li>
-              {% endif %}
               {% if user.is_superuser %}
               <li><a class="dropdown-item" href="{% url 'security_roles' %}"><i class="bi bi-diagram-3 me-2"></i>Roles & Permissions</a></li>
               {% endif %}
 
               </ul>
             </li>
-            {% endif %}
             {% endif %}
 
           </ul>

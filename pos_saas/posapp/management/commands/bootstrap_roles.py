@@ -27,7 +27,25 @@ ROLES = {
         f"{APP}.can_view_reports",
         f"{APP}.view_product", f"{APP}.view_productset", f"{APP}.view_sale", f"{APP}.view_purchase",
     ],
-}
+    "Restaurant Admin": [
+        f"{APP}.can_pos", f"{APP}.can_view_reports", f"{APP}.can_manage_settings", f"{APP}.can_manage_users",
+        f"{APP}.view_product", f"{APP}.add_product", f"{APP}.change_product",
+        f"{APP}.view_sale", f"{APP}.add_sale", f"{APP}.change_sale",
+        f"{APP}.view_customer", f"{APP}.add_customer", f"{APP}.change_customer",
+    ],
+    "Restaurant Manager": [
+        f"{APP}.can_pos", f"{APP}.can_view_reports",
+        f"{APP}.view_product", f"{APP}.add_product", f"{APP}.change_product",
+        f"{APP}.view_sale", f"{APP}.add_sale", f"{APP}.change_sale",
+        f"{APP}.view_customer", f"{APP}.add_customer", f"{APP}.change_customer",
+    ],
+    "Restaurant Cashier": [
+        f"{APP}.can_pos",
+    ],
+    "Restaurant Viewer": [
+        f"{APP}.can_view_reports",
+        f"{APP}.view_product", f"{APP}.view_sale", f"{APP}.view_customer",
+    ],}
 
 class Command(BaseCommand):
     help = "Create default RBAC roles (Groups) and assign permissions."

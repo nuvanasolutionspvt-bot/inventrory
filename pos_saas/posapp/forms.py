@@ -19,6 +19,73 @@ from .models import (
 # Auth / Security Forms
 # ---------------------------
 
+APP_LABEL = 'posapp'
+
+BUSINESS_PERMISSION_CODENAMES = {
+    'restaurant': {
+        'can_pos', 'can_view_reports', 'can_manage_settings', 'can_manage_users',
+        'view_product', 'add_product', 'change_product',
+        'view_sale', 'add_sale', 'change_sale',
+        'view_customer', 'add_customer', 'change_customer',
+    },
+    'pharmacy': {
+        'can_pos', 'can_view_reports', 'can_print_barcodes', 'can_manage_purchases',
+        'can_manage_settings', 'can_manage_users', 'can_credit_receive',
+        'can_credit_charge', 'can_credit_view',
+        'view_product', 'add_product', 'change_product',
+        'view_sale', 'add_sale', 'change_sale',
+        'view_purchase', 'add_purchase', 'change_purchase',
+        'view_customer', 'add_customer', 'change_customer',
+        'view_supplier', 'add_supplier', 'change_supplier',
+        'view_productbatch', 'add_productbatch', 'change_productbatch',
+    },
+    'retail_store': {
+        'can_pos', 'can_view_reports', 'can_print_barcodes', 'can_adjust_stock',
+        'can_manage_purchases', 'can_manage_settings', 'can_manage_users',
+        'can_credit_receive', 'can_credit_charge', 'can_credit_view',
+        'view_product', 'add_product', 'change_product',
+        'view_productset', 'add_productset', 'change_productset',
+        'view_sale', 'add_sale', 'change_sale',
+        'view_purchase', 'add_purchase', 'change_purchase',
+        'view_customer', 'add_customer', 'change_customer',
+        'view_supplier', 'add_supplier', 'change_supplier',
+    },
+    'wholesale': {
+        'can_pos', 'can_view_reports', 'can_print_barcodes', 'can_adjust_stock',
+        'can_manage_purchases', 'can_manage_settings', 'can_manage_users',
+        'can_credit_receive', 'can_credit_charge', 'can_credit_view',
+        'view_product', 'add_product', 'change_product',
+        'view_productset', 'add_productset', 'change_productset',
+        'view_sale', 'add_sale', 'change_sale',
+        'view_purchase', 'add_purchase', 'change_purchase',
+        'view_customer', 'add_customer', 'change_customer',
+        'view_supplier', 'add_supplier', 'change_supplier',
+    },
+}
+
+BUSINESS_ROLE_NAMES = {
+    'restaurant': {'Restaurant Admin', 'Restaurant Manager', 'Restaurant Cashier', 'Restaurant Viewer'},
+    'pharmacy': {'Admin', 'Manager', 'Cashier', 'Viewer'},
+    'retail_store': {'Admin', 'Manager', 'Cashier', 'Viewer'},
+    'wholesale': {'Admin', 'Manager', 'Cashier', 'Viewer'},
+}
+
+
+def permission_queryset_for_business(business_type):
+    qs = Permission.objects.filter(content_type__app_label=APP_LABEL).order_by('codename')
+    allowed = BUSINESS_PERMISSION_CODENAMES.get(business_type)
+    if allowed is None:
+        return qs
+    return qs.filter(codename__in=allowed).distinct()
+
+
+def role_queryset_for_business(business_type):
+    qs = Group.objects.prefetch_related('permissions').order_by('name')
+    allowed = BUSINESS_ROLE_NAMES.get(business_type)
+    if allowed is None:
+        return qs
+    return qs.filter(name__in=allowed)
+
 class CompanyAuthenticationForm(AuthenticationForm):
     """Only platform superusers may authenticate through the company portal."""
 
@@ -406,8 +473,28 @@ class TenantModelFormMixin:
             qs = qs.exclude(pk=self.instance.pk)
         return qs.exists()
 
+    def _generate_restaurant_code(self):
+        base_name = self.cleaned_data.get('name') or 'ITEM'
+        base = slugify(base_name).upper().replace('-', '')[:24] or 'ITEM'
+        code_base = f'MENU-{base}'
+        code = code_base
+        suffix = 2
+        qs = Product.objects.filter(tenant=self.tenant, code=code)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        while qs.exists():
+            suffix_text = f'-{suffix}'
+            code = f'{code_base[:64 - len(suffix_text)]}{suffix_text}'
+            qs = Product.objects.filter(tenant=self.tenant, code=code)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            suffix += 1
+        return code
+
     def save(self, commit=True):
         obj = super().save(commit=False)
+        if self.is_restaurant_tenant and not obj.code:
+            obj.code = self._generate_restaurant_code()
         if self.tenant is not None and hasattr(obj, 'tenant_id') and not obj.tenant_id:
             obj.tenant = self.tenant
         if commit:
@@ -448,6 +535,12 @@ class UserCreateForm(forms.ModelForm):
     )
     is_staff = forms.BooleanField(initial=True, required=False, label="Staff access")
     is_active = forms.BooleanField(initial=True, required=False, label="Active")
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        self.tenant = tenant
+        super().__init__(*args, **kwargs)
+        business_type = getattr(tenant, 'business_type', None)
+        self.fields['groups'].queryset = role_queryset_for_business(business_type)
 
     class Meta:
         model = User
@@ -512,6 +605,12 @@ class UserEditForm(forms.ModelForm):
     is_staff = forms.BooleanField(required=False, label="Staff access")
     is_active = forms.BooleanField(required=False, label="Active")
 
+    def __init__(self, *args, tenant=None, **kwargs):
+        self.tenant = tenant
+        super().__init__(*args, **kwargs)
+        business_type = getattr(tenant, 'business_type', None)
+        self.fields['groups'].queryset = role_queryset_for_business(business_type)
+
     class Meta:
         model = User
         fields = ['email', 'is_staff', 'is_active', 'groups']
@@ -567,6 +666,10 @@ class RolePermissionForm(forms.Form):
         help_text="Attach permissions to this role."
     )
 
+    def __init__(self, *args, business_type=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['permissions'].queryset = permission_queryset_for_business(business_type)
+
 # ---------------------------
 # Master Data Forms
 # ---------------------------
@@ -617,6 +720,9 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
         for field_name in self.PHARMACY_FIELDS:
             self.fields.pop(field_name, None)
         if self.is_restaurant_tenant:
+            self.fields['code'].required = False
+            self.fields['code'].widget = forms.HiddenInput()
+            self.fields.pop('barcode', None)
             self.fields['unit_price'].label = 'Full Price'
             self.fields['half_price'].required = False
         else:
@@ -632,8 +738,28 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
     def is_restaurant_tenant(self):
         return bool(self.tenant and self.tenant.business_type == 'restaurant')
 
+    def _generate_restaurant_code(self):
+        base_name = self.cleaned_data.get('name') or 'ITEM'
+        base = slugify(base_name).upper().replace('-', '')[:24] or 'ITEM'
+        code_base = f'MENU-{base}'
+        code = code_base
+        suffix = 2
+        qs = Product.objects.filter(tenant=self.tenant, code=code)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        while qs.exists():
+            suffix_text = f'-{suffix}'
+            code = f'{code_base[:64 - len(suffix_text)]}{suffix_text}'
+            qs = Product.objects.filter(tenant=self.tenant, code=code)
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            suffix += 1
+        return code
+
     def save(self, commit=True):
         obj = super().save(commit=False)
+        if self.is_restaurant_tenant and not obj.code:
+            obj.code = self._generate_restaurant_code()
         if not self.is_pharmacy_tenant:
             obj.batch_no = ''
             obj.expiry_date = None
@@ -646,7 +772,9 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
         return obj
 
     def clean_code(self):
-        code = self.cleaned_data['code'].strip()
+        code = (self.cleaned_data.get('code') or '').strip()
+        if self.is_restaurant_tenant and not code:
+            return code
         if self.tenant_unique_exists(Product, 'code', code):
             raise ValidationError("This product code already exists for this tenant.")
         return code

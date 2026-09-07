@@ -607,11 +607,19 @@ RESTAURANT_CATEGORIES = (
 )
 
 
+def _ensure_restaurant_categories(tenant):
+    if tenant.business_type != 'restaurant':
+        return
+    for category_name in RESTAURANT_CATEGORIES:
+        Category.objects.get_or_create(tenant=tenant, name=category_name)
+
+
 @login_required
 def restaurant_catalog_setup(request):
     tenant = _tenant(request)
     if tenant.business_type != 'restaurant':
         return redirect('dashboard')
+
 
     catalog = [
         {'id': item_id, 'name': name, 'category': category, 'tax_percent': tax}
@@ -1169,6 +1177,7 @@ def product_list(request):
 @login_required
 def product_create(request):
     tenant = _tenant(request)
+    _ensure_restaurant_categories(tenant)
     if request.method == 'POST':
         form = ProductForm(request.POST, request.FILES, tenant=tenant)
         if form.is_valid():
@@ -1177,7 +1186,7 @@ def product_create(request):
             return redirect('product_list')
     else:
         form = ProductForm(tenant=tenant)
-    return render(request, 'products/form.html', {'form': form, 'title': 'New Product'})
+    return render(request, 'products/form.html', {'form': form, 'title': 'New Product', 'show_barcode': 'barcode' in form.fields})
 
 
 @login_required
@@ -1192,7 +1201,7 @@ def product_update(request, pk):
             return redirect('product_list')
     else:
         form = ProductForm(instance=product, tenant=tenant)
-    return render(request, 'products/form.html', {'form': form, 'title': 'Edit Product'})
+    return render(request, 'products/form.html', {'form': form, 'title': 'Edit Product', 'show_barcode': 'barcode' in form.fields})
 
 
 @login_required
@@ -2760,14 +2769,14 @@ def security_users(request):
 def security_user_new(request):
     tenant = _tenant(request)
     if request.method == 'POST':
-        form = UserCreateForm(request.POST)
+        form = UserCreateForm(request.POST, tenant=tenant)
         if form.is_valid():
             u = form.save()
             TenantMembership.objects.get_or_create(tenant=tenant, user=u, defaults={'role': 'staff'})
             messages.success(request, f"User '{u.username}' created.")
             return redirect('security_users')
     else:
-        form = UserCreateForm()
+        form = UserCreateForm(tenant=tenant)
     return render(request, 'security/user_form.html', {'form': form, 'title': 'New User'})
 
 
@@ -2776,13 +2785,13 @@ def security_user_edit(request, user_id):
     tenant = _tenant(request)
     user = get_object_or_404(User, tenant_memberships__tenant=tenant, pk=user_id)
     if request.method == 'POST':
-        form = UserEditForm(request.POST, instance=user)
+        form = UserEditForm(request.POST, instance=user, tenant=tenant)
         if form.is_valid():
             form.save()
             messages.success(request, f"User '{user.username}' updated.")
             return redirect('security_users')
     else:
-        form = UserEditForm(instance=user, initial={'groups': user.groups.all()})
+        form = UserEditForm(instance=user, initial={'groups': user.groups.all()}, tenant=tenant)
     return render(request, 'security/user_form.html', {'form': form, 'title': f'Edit User — {user.username}'})
 
 
