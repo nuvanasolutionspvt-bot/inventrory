@@ -70,6 +70,29 @@ BUSINESS_ROLE_NAMES = {
     'wholesale': {'Admin', 'Manager', 'Cashier', 'Viewer'},
 }
 
+DEFAULT_ROLE_PERMISSION_CODENAMES = {
+    'Restaurant Admin': BUSINESS_PERMISSION_CODENAMES['restaurant'],
+    'Restaurant Manager': {
+        'can_pos', 'can_view_reports',
+        'view_product', 'add_product', 'change_product',
+        'view_sale', 'add_sale', 'change_sale',
+        'view_customer', 'add_customer', 'change_customer',
+    },
+    'Restaurant Cashier': {'can_pos'},
+    'Restaurant Viewer': {'can_view_reports', 'view_product', 'view_sale', 'view_customer'},
+}
+
+
+def ensure_business_roles(business_type):
+    role_names = BUSINESS_ROLE_NAMES.get(business_type)
+    if not role_names:
+        return
+    for role_name in role_names:
+        group, created = Group.objects.get_or_create(name=role_name)
+        wanted = DEFAULT_ROLE_PERMISSION_CODENAMES.get(role_name)
+        if wanted and (created or not group.permissions.exists()):
+            group.permissions.set(permission_queryset_for_business(business_type).filter(codename__in=wanted))
+
 
 def permission_queryset_for_business(business_type):
     qs = Permission.objects.filter(content_type__app_label=APP_LABEL).order_by('codename')
@@ -80,6 +103,7 @@ def permission_queryset_for_business(business_type):
 
 
 def role_queryset_for_business(business_type):
+    ensure_business_roles(business_type)
     qs = Group.objects.prefetch_related('permissions').order_by('name')
     allowed = BUSINESS_ROLE_NAMES.get(business_type)
     if allowed is None:
@@ -285,9 +309,12 @@ class TenantRegistrationForm(forms.Form):
         return cleaned
 
     def _admin_group(self):
-        group, created = Group.objects.get_or_create(name='Admin')
+        business_type = self.cleaned_data.get('business_type')
+        group_name = 'Restaurant Admin' if business_type == 'restaurant' else 'Admin'
+        ensure_business_roles(business_type)
+        group, created = Group.objects.get_or_create(name=group_name)
         if created or not group.permissions.exists():
-            group.permissions.set(Permission.objects.filter(content_type__app_label='posapp'))
+            group.permissions.set(permission_queryset_for_business(business_type))
         return group
 
     @transaction.atomic
