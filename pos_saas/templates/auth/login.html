@@ -1,132 +1,63 @@
-{% extends 'base.html' %}
 {% load static %}
-{% block title %}Welcome — Nuvana POS{% endblock %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in &mdash; Nuvana POS</title>
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/bootstrap-icons.css' %}">
+  <link rel="stylesheet" href="{% static 'login/login.css' %}?v=image-400-left36-6">
+</head>
+<body class="login-without-header">
 
-{% block content %}
-
-<style>
-  /* Page-specific polish (keeps your global theme intact) */
-  .landing-hero{
-    background: linear-gradient(135deg, var(--brand-2), var(--brand-1));
-    color:#fff; border-radius: 1rem; position: relative; overflow: hidden;
-  }
-  .landing-hero .blob{
-    position:absolute; border-radius:50%; filter: blur(48px); opacity:.25;
-  }
-  .blob.bl1{ width:360px; height:360px; background:#ffffff; top:-80px; left:-80px; }
-  .blob.bl2{ width:300px; height:300px; background:#8ea0ff; bottom:-100px; right:-60px; opacity:.18; }
-  .feature-chip{
-    display:inline-flex; align-items:center; gap:.5rem;
-    background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
-    color:#fff; padding:.45rem .7rem; border-radius: .75rem; margin:.25rem .35rem .35rem 0;
-  }
-  .brand-logo{ max-width: 220px; height:auto; z-index: 1;}
-  .login-card{ border:1px solid var(--card-border); border-radius:1rem; }
-  .login-card .input-group-text{ background:#f8f9fc; }
-  .trusted-note{ color: rgba(255,255,255,.85); }
-</style>
-
-<div class="landing-hero p-4 p-lg-5 mb-4">
-  <span class="blob bl1"></span>
-  <span class="blob bl2"></span>
-
-  <div class="row align-items-center g-4">
-    <!-- Left: Brand + Value props -->
-    <div class="col-12 col-lg-7">
-      <div class="d-flex align-items-center gap-3 mb-3">
-        <img class="brand-logo" src="{% static 'brand/nuvana-light.png' %}?v=2" alt="Nuvana Solutions">
-        <div class="d-none d-lg-block">
-          <div class="h5 mb-0">Nuvana POS</div>
-        </div>
-      </div>
-
-      <h1 class="display-6 fw-semibold mb-2">Smarter billing for every business.</h1>
-      <p class="trusted-note mb-3">
-        Run restaurant billing, retail inventory, wholesale operations, or pharmacy batches from one secure platform—with dashboards and reports tailored to each business type.
-      </p>
-
-      <div class="mb-2">
-        <span class="feature-chip"><i class="bi bi-journal-richtext"></i> Restaurant menus &amp; portions</span>
-        <span class="feature-chip"><i class="bi bi-upc-scan"></i> Fast barcode billing</span>
-        <span class="feature-chip"><i class="bi bi-box-seam"></i> Inventory &amp; purchases</span>
-        <span class="feature-chip"><i class="bi bi-capsule"></i> Batch &amp; expiry tracking</span>
-        <span class="feature-chip"><i class="bi bi-receipt"></i> Tax-ready invoices</span>
-        <span class="feature-chip"><i class="bi bi-graph-up-arrow"></i> Business dashboards</span>
-      </div>
+<div class="page-decoration" aria-hidden="true"><img class="leaf leaf-one" src="{% static 'login/leave.png' %}" alt=""><img class="leaf leaf-two" src="{% static 'login/leave.png' %}" alt=""><img class="tomato" src="{% static 'login/tomato.png' %}" alt=""><img class="kata" src="{% static 'login/kata.png' %}" alt=""><span class="handwriting growth">Growth<br>Served Daily</span><span class="handwriting serve">Serve<br>Manage<br>Grow</span></div>
+<main class="login-stage">
+  <img id="loginSlideshow" class="main-art" src="{% static 'login/main.png' %}" alt="Fresh food beside the Nuvana POS ordering screen">
+  <section class="intro">
+    <div class="intro-brand"><img src="{% static 'brand/nuvana-light.png' %}" alt="Nuvana Solutions"></div>
+    <h1>Smarter billing<br>for <span>food businesses.</span></h1>
+    <p class="intro-copy">Run your restaurant, caf&eacute;, or food stall from one simple platform&mdash;with menu management, fast billing, kitchen orders, and reports for your food business.</p>
+    <div class="feature-list">
+      <span><span class="food-symbol" aria-hidden="true">&#127860;</span>Restaurant menus &amp; portions</span>
+      
+      <span><i class="bi bi-receipt"></i>Tax-ready invoices</span><span><i class="bi bi-bar-chart-fill"></i>Business dashboards</span>
     </div>
-
-    <!-- Right: Login -->
-    <div class="col-12 col-lg-5">
-      {% if form.errors or form.non_field_errors %}
-        <div class="alert alert-danger shadow-sm">
-          <i class="bi bi-exclamation-octagon me-1"></i>
-          Invalid username or password. Please try again.
-        </div>
-      {% endif %}
-
-      <form method="post" class="card login-card shadow-sm">
-        {% csrf_token %}
-        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-
-        <div class="card-body p-4 p-lg-4">
-          <div class="text-center mb-3">
-            <div class="h4 fw-semibold mb-0">Sign in</div>
-            <div class="text-muted">Welcome back</div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Username</label>
-            <div class="input-group">
-              <span class="input-group-text"><i class="bi bi-person"></i></span>
-              <input type="text" name="username" class="form-control" required autocomplete="username"
-                     value="{{ form.username.value|default:'' }}">
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label d-flex justify-content-between align-items-center">
-              <span>Password</span>
-              <a href="#" class="small text-muted disabled" tabindex="-1" aria-disabled="true" title="Password reset not configured">Forgot?</a>
-            </label>
-            <div class="input-group">
-              <span class="input-group-text"><i class="bi bi-lock"></i></span>
-              <input type="password" name="password" class="form-control" required autocomplete="current-password" id="loginPassword">
-              <button class="btn btn-outline-secondary" type="button" id="togglePW" aria-label="Show password">
-                <i class="bi bi-eye"></i>
-              </button>
-            </div>
-          </div>
-
-          <div class="d-grid">
-            <button class="btn btn-primary btn-lg" type="submit">
-              <i class="bi bi-box-arrow-in-right me-1"></i>Login
-            </button>
-          </div>
-
-          <div class="text-center text-muted small mt-3">
-            New business?
-            <a href="{% url 'register' %}" class="text-decoration-none">Create a tenant account</a>.
-          </div>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
+    <p class="handwriting tagline">Simple. Fast. Reliable.</p>
+  </section>
+  <section class="signin-area" aria-labelledby="signin-title">
+    <form method="post" class="signin-card">
+      {% csrf_token %}{% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <h2 id="signin-title">Sign in</h2><p class="welcome">Welcome back</p>
+      {% if form.errors %}<div class="alert alert-danger small" role="alert">Invalid username or password. Please try again.</div>{% endif %}
+      {% for message in messages %}<div class="alert alert-info small" role="status">{{ message }}</div>{% endfor %}
+      <label for="loginUsername">Username</label><div class="login-input"><span><i class="bi bi-person"></i></span><input id="loginUsername" type="text" name="username" required autocomplete="username" value="{{ form.username.value|default:'' }}"></div>
+      <div class="password-label"><label for="loginPassword">Password</label><button type="button" class="forgot-link" id="forgotPassword">Forgot?</button></div>
+      <div class="login-input"><span><i class="bi bi-lock"></i></span><input type="password" name="password" required autocomplete="current-password" id="loginPassword"><button type="button" id="togglePW" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye"></i></button></div>
+      <p id="passwordHelp" class="small mt-2" role="status" hidden>Contact your business administrator to reset your password.</p>
+      <button class="login-submit" type="submit"><i class="bi bi-box-arrow-in-right"></i> Login</button>
+      <p class="register-note">New business? <a href="{% url 'register' %}">Create a tenant account.</a></p>
+    </form>
+    <div class="business-types" aria-label="For food businesses"><span><i class="bi bi-cup-hot"></i>Restaurants</span><span><i class="bi bi-cup-straw"></i>Caf&eacute;s</span><span><i class="bi bi-truck"></i>Food Trucks</span><span><i class="bi bi-shop"></i>Small Food SMEs</span></div>
+  </section>
+  <section class="trust-strip" aria-label="Why Nuvana"><div><i class="bi bi-shield-fill-check"></i><p>Trusted by growing businesses<small>Simple to set up. Easy to use.</small></p></div><div><i class="bi bi-lightning-fill"></i><p>Faster service<small>Serve more customers with ease.</small></p></div><div><i class="bi bi-heart"></i><p>Built for Food Businesses<small>From caf&eacute;s to cloud kitchens.</small></p></div></section>
+</main>
+<footer class="login-footer"><p>&copy; {% now "Y" %} Nuvana POS. All rights reserved.</p><p><span></span>Billing today. A bigger tomorrow.<span></span></p></footer>
 <script>
-  // show/hide password
-  (function(){
-    const btn = document.getElementById('togglePW');
-    const input = document.getElementById('loginPassword');
-    if (btn && input) {
-      btn.addEventListener('click', function(){
-        const isPwd = input.getAttribute('type') === 'password';
-        input.setAttribute('type', isPwd ? 'text' : 'password');
-        const icon = btn.querySelector('i');
-        if (icon) icon.className = isPwd ? 'bi bi-eye-slash' : 'bi bi-eye';
-        btn.setAttribute('aria-label', isPwd ? 'Hide password' : 'Show password');
-      });
-    }
-  })();
+(function () {
+  const slide = document.getElementById('loginSlideshow');
+  const sources = ["{% static 'login/main.png' %}", "{% static 'login/1.png' %}", "{% static 'login/2.png' %}", "{% static 'login/3.png' %}"];
+  let index = 0;
+  sources.forEach(src => { const image = new Image(); image.src = src; });
+  setInterval(() => {
+    if (document.hidden) return;
+    index = (index + 1) % sources.length;
+    slide.src = sources[index];
+  }, 5000);
+})();
+
+
+
+document.getElementById('togglePW').addEventListener('click', function(){const input=document.getElementById('loginPassword');const show=input.type==='password';input.type=show?'text':'password';this.setAttribute('aria-label',show?'Hide password':'Show password');this.setAttribute('aria-pressed',String(show));this.querySelector('i').className=show?'bi bi-eye-slash':'bi bi-eye';});
+document.getElementById('forgotPassword').addEventListener('click',function(){document.getElementById('passwordHelp').hidden=false;});
 </script>
-{% endblock %}
+</body></html>

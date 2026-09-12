@@ -5,7 +5,10 @@
 
 {% block content %}
 <style>
-  main.app-shell:has(.restaurant-pos){max-width:1320px}
+  .restaurant-pos .favorite-product{position:absolute;top:6px;right:6px;z-index:2;width:28px;height:28px;border:0;border-radius:50%;background:#fff9e6;color:#b77900;display:inline-flex;align-items:center;justify-content:center;padding:0;font-size:16px}
+  .restaurant-pos .favorite-product[aria-pressed="true"]{color:#ffc107;background:#fff7d6}
+  .restaurant-pos .favorite-product:focus-visible{outline:2px solid #b77900;outline-offset:2px}
+
   .restaurant-pos .menu-workspace{display:grid;grid-template-columns:150px minmax(0,1fr);gap:1rem;align-items:start}
   .restaurant-pos .category-sidebar{position:sticky;top:1rem;background:#fff;border:1px solid var(--card-border);border-radius:.75rem;padding:.75rem}
   .restaurant-pos .category-list{display:flex;flex-direction:column;gap:.5rem;max-height:calc(100vh - 10rem);overflow-y:auto}
@@ -55,6 +58,7 @@
         {% for product in products %}
         <div class="col menu-item" data-category="{{ product.category_id|default:'' }}" data-name="{{ product.name|lower }}">
           <article class="card menu-card h-100 w-100" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.unit_price }}" data-half-price="{{ product.half_price|default:'' }}" data-full-available="{{ product.full_available|yesno:'true,false' }}" data-tax="{{ product.tax_percent }}">
+            <button type="button" class="favorite-product" aria-pressed="false" aria-label="Favorite {{ product.name }}" title="Add to favorites"><i class="bi bi-star" aria-hidden="true"></i></button>
             <button type="button" class="card-add-area add-item" aria-label="Add {{ product.name }}">
               {% if product.image %}<img class="menu-image" src="{{ product.image.url }}" alt="{{ product.name }}" loading="lazy">{% else %}
               {% if product.name == 'Crispy Chicken' %}<img class="menu-image" src="/media/items/Crispy%20Chicken.jpg" alt="Crispy Chicken" loading="lazy">{% endif %}
@@ -131,15 +135,31 @@
           <div class="row g-2 mb-3">
             <div class="col-6"><label class="form-label small">Date</label>{{ form.date|add_class:'form-control' }}</div>
             <div class="col-6"><label class="form-label small">Discount</label>{{ form.discount|add_class:'form-control'|attr:'min:0' }}</div>
+            {% if tenant_features.table_management %}
+            <div class="col-6"><label class="form-label small">Table</label>{{ form.restaurant_table|add_class:'form-select' }}</div>
+            <div class="col-6"><label class="form-label small">Waiter</label>{{ form.waiter|add_class:'form-select' }}</div>
+            {% endif %}
             <div class="col-12"><label class="form-label small">Customer</label>{{ form.customer|add_class:'form-select' }}</div>
-            <div class="col-6"><label class="form-label small">Payment</label>{{ form.payment_method|add_class:'form-select' }}</div>
-            <div class="col-6"><label class="form-label small">Paid Amount</label>{{ form.paid_amount|add_class:'form-control'|attr:'min:0' }}</div>
+            {% if not is_waiter %}
+              <div class="col-6"><label class="form-label small">Payment</label>{{ form.payment_method|add_class:'form-select' }}</div>
+              <div class="col-6"><label class="form-label small">Paid Amount</label>{{ form.paid_amount|add_class:'form-control'|attr:'min:0' }}</div>
+            {% endif %}
           </div>
-          {% if form.errors %}<div class="alert alert-danger small">Please correct the billing details.</div>{% endif %}
+          {% if form.errors %}
+          <div class="alert alert-danger small">
+            {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+            {% for field in form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}
+          </div>
+          {% endif %}
           <div class="d-flex justify-content-between mb-1"><span>Subtotal</span><strong>₹<span id="subtotal">0.00</span></strong></div>
           <div class="d-flex justify-content-between mb-1"><span>Tax</span><strong>₹<span id="tax">0.00</span></strong></div>
           <div class="d-flex justify-content-between h5 mt-3"><span>Total</span><strong>₹<span id="grandTotal">0.00</span></strong></div>
-          <button id="completeSale" class="btn btn-primary w-100 mt-2" disabled><i class="bi bi-check-circle me-1"></i>{% if editing %}Update &amp; Print Bill{% else %}Complete Sale{% endif %}</button>
+          {% if tenant_features.kot_management %}
+            <button id="generateKot" name="sale_action" value="generate_kot" class="btn btn-outline-primary w-100 mt-2" disabled><i class="bi bi-receipt-cutoff me-1"></i>{% if editing %}Update KOT{% else %}Generate KOT{% endif %}</button>
+          {% endif %}
+          {% if not is_waiter %}
+            <button id="completeSale" name="sale_action" value="complete" class="btn btn-primary w-100 mt-2" disabled><i class="bi bi-check-circle me-1"></i>{% if editing %}Complete Payment &amp; Print Bill{% else %}Complete Sale{% endif %}</button>
+          {% endif %}
         </div>
       </div>
     </aside>
@@ -151,9 +171,39 @@
   const cart = new Map(), grid = document.getElementById('menuGrid'), search = document.getElementById('menuSearch');
   const saved = document.getElementById('items_json').value;
   try { JSON.parse(saved || '[]').forEach(x => {const portion=x.portion||'full',key=String(x.product_id)+':'+portion;cart.set(key,{key,id:String(x.product_id),portion,name:x.name||'Item',price:Number(x.unit_price||0),tax:Number(x.tax_percent||0),qty:Number(x.qty||1)})}); } catch(e) {}
+  const favoriteKey = 'restaurant-favorites:{{ request.tenant.pk }}:{{ request.user.pk }}';
+  let favorites = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(favoriteKey) || '[]');
+    if (Array.isArray(saved)) favorites = new Set(saved.map(String));
+  } catch (error) {}
+  const menuItems = Array.from(document.querySelectorAll('.menu-item'));
+  function updateFavorites() {
+    menuItems.forEach(item => {
+      const card = item.querySelector('.menu-card');
+      const button = card.querySelector('.favorite-product');
+      const selected = favorites.has(card.dataset.id);
+      item.style.order = selected ? '-1' : '0';
+      button.setAttribute('aria-pressed', String(selected));
+      button.title = selected ? 'Remove from favorites' : 'Add to favorites';
+      button.setAttribute('aria-label', button.title + ': ' + card.dataset.name);
+      button.querySelector('i').className = selected ? 'bi bi-star-fill' : 'bi bi-star';
+    });
+  }
+  menuItems.forEach(item => {
+    const card = item.querySelector('.menu-card');
+    card.querySelector('.favorite-product').addEventListener('click', event => {
+      event.stopPropagation();
+      const id = card.dataset.id;
+      if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
+      try { localStorage.setItem(favoriteKey, JSON.stringify([...favorites])); } catch (error) {}
+      updateFavorites();
+    });
+  });
+  updateFavorites();
   let category='all';
   function render(){let subtotal=0,tax=0,count=0,html='';cart.forEach(item=>{const line=item.price*item.qty;subtotal+=line;tax+=line*item.tax/100;count+=item.qty;html+=`<div class="cart-row d-flex justify-content-between gap-2"><div class="flex-grow-1"><div class="fw-semibold">${escapeHtml(item.name)}</div><div class="small text-muted">₹${item.price.toFixed(2)} each</div></div><div class="text-end"><div class="qty-control"><button type="button" data-action="minus" data-key="${item.key}" aria-label="Remove one">−</button><span>${item.qty}</span><button type="button" data-action="plus" data-key="${item.key}" aria-label="Add one">+</button></div><div class="small fw-semibold mt-1">₹${line.toFixed(2)}</div></div></div>`});
-    document.getElementById('cartItems').innerHTML=html;document.querySelectorAll('.menu-card').forEach(card=>{const portion=selectedPortion(card);card.querySelector('.card-qty-value').textContent=cart.get(card.dataset.id+':'+portion)?.qty||0});document.getElementById('cartEmpty').classList.toggle('d-none',cart.size>0);document.getElementById('cartCount').textContent=count;document.getElementById('subtotal').textContent=subtotal.toFixed(2);document.getElementById('tax').textContent=tax.toFixed(2);const discount=Number(document.getElementById('id_discount').value||0);const total=Math.max(0,subtotal+tax-discount);document.getElementById('grandTotal').textContent=total.toFixed(2);document.getElementById('id_paid_amount').value=total.toFixed(2);document.getElementById('completeSale').disabled=!cart.size;document.getElementById('items_json').value=JSON.stringify([...cart.values()].map(x=>({kind:'product',product_id:x.id,portion:x.portion,qty:x.qty,unit_price:x.price})));
+    document.getElementById('cartItems').innerHTML=html;document.querySelectorAll('.menu-card').forEach(card=>{const portion=selectedPortion(card);card.querySelector('.card-qty-value').textContent=cart.get(card.dataset.id+':'+portion)?.qty||0});document.getElementById('cartEmpty').classList.toggle('d-none',cart.size>0);document.getElementById('cartCount').textContent=count;document.getElementById('subtotal').textContent=subtotal.toFixed(2);document.getElementById('tax').textContent=tax.toFixed(2);const discount=Number(document.getElementById('id_discount').value||0);const total=Math.max(0,subtotal+tax-discount);document.getElementById('grandTotal').textContent=total.toFixed(2);const paid=document.getElementById('id_paid_amount');if(paid)paid.value=total.toFixed(2);const completeBtn=document.getElementById('completeSale');if(completeBtn)completeBtn.disabled=!cart.size;const kotBtn=document.getElementById('generateKot');if(kotBtn)kotBtn.disabled=!cart.size;document.getElementById('items_json').value=JSON.stringify([...cart.values()].map(x=>({kind:'product',product_id:x.id,portion:x.portion,qty:x.qty,unit_price:x.price})));
   }
   function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
   function selectedPortion(card){return card.querySelector('.portion-radio:checked')?.value||'full'}
@@ -164,7 +214,9 @@
   document.getElementById('cartItems').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const item=cart.get(b.dataset.key);if(b.dataset.action==='plus')item.qty++;else if(--item.qty<=0)cart.delete(b.dataset.key);render()});
   document.querySelectorAll('.category-btn').forEach(btn=>btn.addEventListener('click',()=>{category=btn.dataset.category;document.querySelectorAll('.category-btn').forEach(x=>{x.classList.toggle('btn-primary',x===btn);x.classList.toggle('btn-outline-primary',x!==btn)});filter()}));
   search.addEventListener('input',filter);document.getElementById('id_discount').addEventListener('input',render);
-  document.getElementById('restaurantPosForm').addEventListener('submit',e=>{if(!cart.size){e.preventDefault();return}document.getElementById('completeSale').disabled=true});render();
+  document.getElementById('restaurantPosForm').addEventListener('submit',e=>{if(!cart.size){e.preventDefault();return}const completeBtn=document.getElementById('completeSale');if(completeBtn)completeBtn.disabled=true});render();
 })();
 </script>
 {% endblock %}
+
+

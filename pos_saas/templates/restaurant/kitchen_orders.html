@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Kitchen Orders - Nuvana POS{% endblock %}
+{% block breadcrumb %}Restaurant / Kitchen Orders{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="m-0">Kitchen Orders</h3>
+  <a href="{% url 'kitchen_display' %}" class="btn btn-outline-primary"><i class="bi bi-display me-1"></i>Kitchen Display</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>Ticket</th><th>Bill</th><th>Table</th><th>Waiter</th><th>Items</th><th>Status</th><th style="width:260px"></th></tr></thead>
+      <tbody>
+        {% for kot in orders %}
+        <tr>
+          <td class="fw-semibold">{{ kot.ticket_no }}</td>
+          <td><a href="{% url 'sale_update' kot.sale.id %}">INV-{{ kot.sale.id }}</a><div class="small text-muted">{{ kot.created_at|date:'d M Y H:i' }}</div><div class="small text-muted">{{ kot.sale.get_order_status_display }}</div></td>
+          <td>{{ kot.sale.restaurant_table|default:'-' }}</td>
+          <td>{{ kot.sale.waiter|default:'-' }}</td>
+          <td>
+            {% for item in kot.sale.saleitem_set.all %}
+              <div>{{ item.qty }} x {{ item.description|default:item.product.name }}{% if item.details %} <span class="text-muted">({{ item.details }})</span>{% endif %}</div>
+            {% endfor %}
+          </td>
+          <td><span class="badge {% if kot.status == 'ready' %}text-bg-success{% elif kot.status == 'preparing' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ kot.get_status_display }}</span></td>
+          <td>
+            <form method="post" action="{% url 'kitchen_order_status' kot.id %}" class="d-flex gap-2">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{% url 'kitchen_orders' %}">
+              <select name="status" class="form-select form-select-sm">
+                {% for value,label in kot.STATUS_CHOICES %}<option value="{{ value }}" {% if kot.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-sm btn-primary">Update</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-5">No kitchen orders yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+

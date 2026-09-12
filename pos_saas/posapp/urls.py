@@ -2,9 +2,16 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('restaurant/waiter/notifications/', views.waiter_order_notifications, name='waiter_order_notifications'),
     path('', views.dashboard, name='dashboard'),
     path('register/', views.register, name='register'),
     path('restaurant/catalog/setup/', views.restaurant_catalog_setup, name='restaurant_catalog_setup'),
+    path('restaurant/modules/<slug:module>/', views.restaurant_module_page, name='restaurant_module_page'),
+    path('restaurant/tables/', views.restaurant_tables, name='restaurant_tables'),
+    path('restaurant/tables/<int:table_id>/delete/', views.restaurant_table_delete, name='restaurant_table_delete'),
+    path('restaurant/kitchen/orders/', views.kitchen_orders, name='kitchen_orders'),
+    path('restaurant/kitchen/orders/<int:kot_id>/status/', views.kitchen_order_status, name='kitchen_order_status'),
+    path('restaurant/kitchen/display/', views.kitchen_display, name='kitchen_display'),
     path('company/', views.company_dashboard, name='company_dashboard'),
     path('company/businesses/', views.company_business_list, name='company_business_list'),
     path('company/businesses/new/', views.company_business_create, name='company_business_create'),
@@ -59,6 +66,7 @@ urlpatterns = [
     # ADD to your urlpatterns
     path('security/users/', views.security_users, name='security_users'),
     path('security/users/new/', views.security_user_new, name='security_user_new'),
+    path('security/users/<int:user_id>/delete/', views.security_user_delete, name='security_user_delete'),
     path('security/users/<int:user_id>/edit/', views.security_user_edit, name='security_user_edit'),
 
     path('security/roles/', views.security_roles, name='security_roles'),
@@ -77,3 +85,4 @@ urlpatterns = [
     path('settings/backup/restore/', views.backup_restore_upload, name='backup_restore_upload'),
 
 ]
+

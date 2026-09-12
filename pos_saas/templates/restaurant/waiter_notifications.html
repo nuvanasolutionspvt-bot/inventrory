@@ -1,0 +1,59 @@
+<aside class="position-fixed bottom-0 end-0 m-3 dropup" style="z-index:1080" aria-label="Kitchen notifications">
+  <button id="kitchenNotificationBell" class="btn btn-primary rounded-circle position-relative shadow d-inline-flex align-items-center justify-content-center" style="width:48px;height:48px" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-controls="waiterKitchenBody" aria-label="Kitchen notifications" title="Kitchen notifications">
+    <i class="bi bi-bell fs-5" aria-hidden="true"></i>
+    <span id="waiterReadyCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" hidden></span>
+  </button>
+  <div id="waiterKitchenBody" class="dropdown-menu dropdown-menu-end p-0 shadow border" style="width:320px;max-width:calc(100vw - 2rem);max-height:calc(100dvh - 100px);overflow:auto">
+    <div class="px-3 py-2 border-bottom fw-semibold">Kitchen updates</div>
+    <div id="waiterKitchenAlert" class="px-3 pt-2 small fw-semibold text-success" role="status" aria-live="polite"></div>
+    <div id="waiterKitchenOrders" class="list-group list-group-flush" style="max-height:280px;overflow:auto"></div>
+    <div id="waiterKitchenConnection" class="px-3 py-2 small text-muted">Checking kitchen...</div>
+  </div>
+</aside>
+<script>
+(function () {
+  const list = document.getElementById('waiterKitchenOrders');
+  const count = document.getElementById('waiterReadyCount');
+  const alert = document.getElementById('waiterKitchenAlert');
+  const connection = document.getElementById('waiterKitchenConnection');
+  let previous = new Map();
+  let stopped = false;
+  async function refresh() {
+    if (stopped) return;
+    try {
+      const response = await fetch("{% url 'waiter_order_notifications' %}", {credentials:'same-origin', cache:'no-store', headers:{'Accept':'application/json'}});
+      if (response.status === 403 || response.status === 401 || response.redirected) { stopped = true; connection.textContent = 'Sign in again to receive kitchen updates.'; return; }
+      if (!response.ok) throw new Error('Unavailable');
+      const data = await response.json();
+      const ready = data.orders.filter(order => order.status === 'ready');
+      const newlyReady = ready.filter(order => previous.get(order.id) !== 'ready');
+      if (newlyReady.length) alert.textContent = newlyReady.map(order => order.table + ' - ' + order.ticket + ' is ready. Please collect.').join(' ');
+      else alert.textContent = ready.map(order => order.table + ' - ' + order.ticket + ' is ready. Please collect.').join(' ');
+      count.hidden = !ready.length;
+      count.textContent = ready.length;
+      document.getElementById('kitchenNotificationBell').setAttribute('aria-label', 'Kitchen notifications, ' + ready.length + ' orders ready');
+      list.replaceChildren();
+      data.orders.forEach(order => {
+        const link = document.createElement('a');
+        link.href = order.url;
+        link.className = 'list-group-item list-group-item-action' + (order.status === 'ready' ? ' list-group-item-success' : '');
+        const title = document.createElement('div');
+        title.className = 'fw-semibold';
+        title.textContent = order.table + ' - ' + order.ticket;
+        const status = document.createElement('div');
+        status.className = 'small';
+        status.textContent = 'Order #' + order.order + ' - ' + order.status_label;
+        link.append(title, status);
+        list.append(link);
+      });
+      previous = new Map(data.orders.map(order => [order.id, order.status]));
+      connection.textContent = data.orders.length ? 'Updates automatically every 5 seconds.' : 'No open kitchen orders.';
+    } catch (error) {
+      connection.textContent = 'Connection interrupted. Retrying kitchen updates...';
+    } finally {
+      if (!stopped) setTimeout(refresh, 5000);
+    }
+  }
+  refresh();
+})();
+</script>

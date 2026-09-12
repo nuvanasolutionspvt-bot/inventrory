@@ -14,7 +14,7 @@
 html, body { height: 100%; }
 .app-body{ background: var(--bg-soft); color: var(--text-ink); }
 
-.app-shell{ max-width: 1200px; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; }
+.app-shell{ max-width: 1200px!important; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; }
 
 /* NAVBAR */
 .app-navbar{
@@ -26,7 +26,7 @@ html, body { height: 100%; }
 .app-navbar .navbar-brand img{ height: 28px; display:block; }
 .app-navbar .navbar-toggler{ border-color: rgba(255,255,255,.35); }
 .app-navbar .navbar-toggler-icon{ filter: invert(1); }
-.app-navbar .nav-link{ color: var(--bs-navbar-color); }
+.app-navbar .nav-link{ color: var(--bs-navbar-color); white-space: nowrap; }
 .app-navbar .nav-link:hover, .app-navbar .nav-link:focus{ color: var(--bs-navbar-hover-color); }
 .navbar .dropdown-menu{ border-radius: .5rem; }
 
@@ -146,3 +146,4 @@ a:hover{ color: #08127F; }
   font-size: .72rem;
   line-height: 1.1;
 }
+

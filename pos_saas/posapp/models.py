@@ -145,6 +145,51 @@ class SubscriptionPaymentOrder(TimeStampedModel):
         return f"{self.tenant} {self.plan} {self.status}"
 
 
+class TenantFeature(TimeStampedModel):
+    tenant = models.OneToOneField(Tenant, related_name='features', on_delete=models.CASCADE)
+    pos_billing = models.BooleanField(default=True)
+    products_catalog = models.BooleanField(default=True)
+    kot_management = models.BooleanField(default=False)
+    table_management = models.BooleanField(default=False)
+    kitchen_display = models.BooleanField(default=False)
+    online_payment = models.BooleanField(default=False)
+    inventory = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Tenant feature'
+        verbose_name_plural = 'Tenant features'
+
+    def __str__(self):
+        return f'Features ({self.tenant})'
+
+
+class RestaurantTable(TimeStampedModel):
+    STATUS_AVAILABLE = 'available'
+    STATUS_OCCUPIED = 'occupied'
+    STATUS_CHOICES = (
+        (STATUS_AVAILABLE, 'Available'),
+        (STATUS_OCCUPIED, 'Occupied'),
+    )
+
+    tenant = models.ForeignKey(Tenant, related_name='restaurant_tables', on_delete=models.CASCADE)
+    name = models.CharField(max_length=60)
+    seats = models.PositiveIntegerField(default=4)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_AVAILABLE)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'name'], name='uniq_tenant_restaurant_table_name'),
+        ]
+        indexes = [
+            models.Index(fields=['tenant', 'status'], name='posapp_rt_tenant_status_idx'),
+            models.Index(fields=['tenant', 'is_active'], name='posapp_rt_tenant_active_idx'),
+        ]
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
 class TenantMembership(TimeStampedModel):
     ROLE_CHOICES = (
         ('owner', 'Owner'),
@@ -520,6 +565,13 @@ class Sale(TimeStampedModel):
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    ORDER_STATUS_OPEN = 'open'
+    ORDER_STATUS_PAID = 'paid'
+    ORDER_STATUS_CHOICES = ((ORDER_STATUS_OPEN, 'Open'), (ORDER_STATUS_PAID, 'Paid'))
+    order_status = models.CharField(max_length=20, choices=ORDER_STATUS_CHOICES, default=ORDER_STATUS_PAID)
+    restaurant_table = models.ForeignKey('RestaurantTable', null=True, blank=True, on_delete=models.SET_NULL)
+    waiter = models.ForeignKey(User, null=True, blank=True, related_name='waiter_sales', on_delete=models.SET_NULL)
+
     PAYMENT_CHOICES = (('cash', 'Cash'), ('card', 'Card'), ('upi', 'UPI'), ('other', 'Other'))
     payment_method = models.CharField(max_length=10, choices=PAYMENT_CHOICES, default='cash')
 
@@ -558,6 +610,39 @@ class SaleItem(models.Model):
     def __str__(self):
         return f"{self.description or self.product or self.product_set} x {self.qty}"
 
+
+class KitchenOrderTicket(TimeStampedModel):
+    STATUS_PENDING = 'pending'
+    STATUS_PREPARING = 'preparing'
+    STATUS_READY = 'ready'
+    STATUS_CHOICES = (
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_PREPARING, 'Preparing'),
+        (STATUS_READY, 'Ready'),
+    )
+
+    tenant = models.ForeignKey(Tenant, related_name='kitchen_orders', on_delete=models.CASCADE)
+    sale = models.OneToOneField('Sale', related_name='kot', on_delete=models.CASCADE)
+    ticket_no = models.CharField(max_length=32)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'ticket_no'], name='uniq_tenant_kot_ticket_no'),
+        ]
+        indexes = [
+            models.Index(fields=['tenant', 'status'], name='posapp_kot_tenant_status_idx'),
+            models.Index(fields=['tenant', 'created_at'], name='posapp_kot_tenant_created_idx'),
+        ]
+        ordering = ['-created_at']
+        permissions = [
+            ('can_manage_kot', 'Can manage kitchen orders'),
+            ('can_view_kds', 'Can view kitchen display'),
+        ]
+
+    def __str__(self):
+        return f'{self.ticket_no} - {self.get_status_display()}'
 
 # -------------------------------------------------------------------
 # Stock movements
@@ -604,6 +689,8 @@ class AppPermission(models.Model):
             ('can_credit_receive', 'Can receive customer payments'),
             ('can_credit_charge',  'Can post customer charges/fees'),
             ('can_credit_view',    'Can view customer credit statements'),
+            ('can_manage_kot', 'Can manage kitchen orders'),
+            ('can_view_kds', 'Can view kitchen display'),
         ]
 
 
@@ -730,3 +817,6 @@ def ensure_settings_singleton(sender, **kwargs):
             )
         for tenant in Tenant.objects.all():
             SiteSetting.get(tenant)
+
+
+

@@ -96,53 +96,6 @@
           </div>
         </div>
 
-        <h6 class="text-muted">SMS Gateway</h6>
-        <div class="row g-3 mb-3">
-          <div class="col-md-2">
-            <div class="form-check mt-2">
-              {{ form.sms_enabled|add_class:"form-check-input" }}
-              <label class="form-check-label">Enable SMS</label>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Provider</label>
-            {{ form.sms_provider|add_class:"form-select" }}
-          </div>
-          <div class="col-md-5">
-            <label class="form-label">API Key</label>
-            {{ form.sms_api_key|add_class:"form-control" }}
-          </div>
-          <div class="col-md-2">
-            <label class="form-label">Sender ID</label>
-            {{ form.sms_sender|add_class:"form-control" }}
-          </div>
-        </div>
-
-        <h6 class="text-muted">Call Gateway</h6>
-        <div class="row g-3">
-          <div class="col-md-2">
-            <div class="form-check mt-2">
-              {{ form.call_enabled|add_class:"form-check-input" }}
-              <label class="form-check-label">Enable Calls</label>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Provider</label>
-            {{ form.call_provider|add_class:"form-select" }}
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">SID</label>
-            {{ form.call_sid|add_class:"form-control" }}
-          </div>
-          <div class="col-md-2">
-            <label class="form-label">Token</label>
-            {{ form.call_token|add_class:"form-control" }}
-          </div>
-          <div class="col-md-2">
-            <label class="form-label">From</label>
-            {{ form.call_from|add_class:"form-control" }}
-          </div>
-        </div>
       </div>
       <div class="card-footer bg-white d-flex justify-content-between">
         <a href="{% url 'dashboard' %}" class="btn btn-light">Back</a>

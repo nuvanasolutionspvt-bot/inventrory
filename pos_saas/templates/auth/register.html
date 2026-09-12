@@ -55,6 +55,20 @@
             {{ form.contact_email }}
             {% for error in form.contact_email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
           </div>
+          <div class="col-12 d-none" id="businessModulesSection">
+            <h6 class="text-muted mb-2">Business Modules</h6>
+            <div class="row g-2">
+              {% for checkbox in form.business_modules %}
+                <div class="col-md-4">
+                  <div class="form-check">
+                    {{ checkbox.tag }}
+                    <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+            {% for error in form.business_modules.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          </div>
           <div class="col-md-4">
             <label class="form-label" for="{{ form.contact_phone.id_for_label }}">Business phone</label>
             {{ form.contact_phone }}
@@ -139,4 +153,24 @@
     </form>
   </div>
 </div>
+<script>
+(function(){
+  const businessType = document.getElementById('{{ form.business_type.id_for_label }}');
+  const modulesSection = document.getElementById('businessModulesSection');
+  const posBilling = document.querySelector('input[name="business_modules"][value="pos_billing"]');
+  if (posBilling) {
+    posBilling.addEventListener('click', function(event){
+      event.preventDefault();
+      posBilling.checked = true;
+    });
+  }
+  function syncBusinessModules(){
+    const isRestaurant = businessType && businessType.value === 'restaurant';
+    if (modulesSection) modulesSection.classList.toggle('d-none', !isRestaurant);
+    if (posBilling) posBilling.checked = true;
+  }
+  if (businessType) businessType.addEventListener('change', syncBusinessModules);
+  syncBusinessModules();
+})();
+</script>
 {% endblock %}

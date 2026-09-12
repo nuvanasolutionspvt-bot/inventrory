@@ -21,7 +21,7 @@
 <table class="table table-striped align-middle">
   <thead>
     <tr>
-      <th>Username</th><th>Email</th><th>Status</th><th>Roles</th><th style="width:120px"></th>
+      <th>Username</th><th>Email</th><th>Status</th><th>Roles</th><th style="width:200px"></th>
     </tr>
   </thead>
   <tbody>
@@ -39,6 +39,12 @@
       </td>
       <td class="text-end">
         <a class="btn btn-sm btn-outline-primary" href="{% url 'security_user_edit' u.id %}">Edit</a>
+        {% if u.pk != request.user.pk and not u.is_superuser %}
+        <form method="post" action="{% url 'security_user_delete' u.id %}" class="d-inline" onsubmit="return confirm('Remove this user from this business? Their access to this business will be deleted.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Delete {{ u.username }} from this business">Delete</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
     {% empty %}

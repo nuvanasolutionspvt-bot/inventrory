@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Category, Product, ProductBatch, ProductSet, ProductSetItem, Supplier, Customer, Purchase,
-    PurchaseItem, Sale, SaleItem, StockMove, Tenant, TenantMembership,
+    PurchaseItem, Sale, SaleItem, StockMove, Tenant, TenantMembership, TenantFeature, KitchenOrderTicket, RestaurantTable,
     SiteSetting, CustomerLedger, SubscriptionPlan, TenantSubscription,
     SubscriptionPaymentOrder
 )
@@ -13,14 +13,27 @@ class TenantMembershipInline(admin.TabularInline):
     raw_id_fields = ['user']
 
 
+class TenantFeatureInline(admin.StackedInline):
+    model = TenantFeature
+    extra = 0
+    can_delete = False
+
+
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
     list_display = ['name', 'slug', 'business_type', 'owner_name', 'contact_email', 'contact_phone', 'plan', 'is_active']
     list_filter = ['business_type', 'plan', 'is_active', 'country', 'state']
     search_fields = ['name', 'slug', 'owner_name', 'contact_email', 'contact_phone', 'tax_id']
     prepopulated_fields = {'slug': ('name',)}
-    inlines = [TenantMembershipInline]
+    inlines = [TenantMembershipInline, TenantFeatureInline]
 
+
+@admin.register(RestaurantTable)
+class RestaurantTableAdmin(admin.ModelAdmin):
+    list_display = ['tenant', 'name', 'seats', 'status', 'is_active']
+    list_filter = ['tenant', 'status', 'is_active']
+    search_fields = ['tenant__name', 'tenant__slug', 'name']
+    raw_id_fields = ['tenant']
 
 @admin.register(TenantMembership)
 class TenantMembershipAdmin(admin.ModelAdmin):
@@ -28,6 +41,16 @@ class TenantMembershipAdmin(admin.ModelAdmin):
     list_filter = ['role', 'is_active']
     raw_id_fields = ['tenant', 'user']
     search_fields = ['tenant__name', 'tenant__slug', 'user__username', 'user__email']
+
+
+@admin.register(TenantFeature)
+class TenantFeatureAdmin(admin.ModelAdmin):
+    list_display = [
+        'tenant', 'pos_billing', 'products_catalog', 'kot_management',
+        'table_management', 'kitchen_display', 'online_payment', 'inventory'
+    ]
+    list_filter = ['pos_billing', 'products_catalog', 'kot_management', 'table_management', 'kitchen_display', 'online_payment', 'inventory']
+    search_fields = ['tenant__name', 'tenant__slug']
 
 
 @admin.register(SubscriptionPlan)
@@ -133,3 +156,10 @@ class CustomerLedgerAdmin(admin.ModelAdmin):
 class SiteSettingAdmin(admin.ModelAdmin):
     list_display = ['tenant', 'org_name', 'org_phone', 'org_email', 'printer_type']
     search_fields = ['tenant__name', 'tenant__slug', 'org_name', 'org_phone', 'org_email']
+
+@admin.register(KitchenOrderTicket)
+class KitchenOrderTicketAdmin(admin.ModelAdmin):
+    list_display = ['ticket_no', 'tenant', 'sale', 'status', 'created_at']
+    list_filter = ['tenant', 'status', 'created_at']
+    raw_id_fields = ['tenant', 'sale']
+    search_fields = ['ticket_no', 'tenant__name', 'tenant__slug']

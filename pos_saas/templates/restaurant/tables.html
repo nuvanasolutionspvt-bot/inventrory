@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}Tables - Nuvana POS{% endblock %}
+{% block breadcrumb %}Restaurant / Tables{% endblock %}
+
+{% block content %}
+<style>
+  .table-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:1rem}
+  .table-card{border:1px solid var(--card-border);border-radius:.5rem;background:#fff;box-shadow:0 4px 14px rgba(20,38,58,.06);min-height:145px;display:flex;flex-direction:column;justify-content:space-between;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+  .table-card:hover{border-color:var(--brand-2);box-shadow:0 8px 22px rgba(20,38,58,.1);transform:translateY(-1px)}
+  .table-card.occupied{border-color:#f1c40f;background:#fffaf0}
+  .table-card.inactive{opacity:.62}
+  .table-card .table-icon{width:38px;height:38px;border-radius:.5rem;display:inline-flex;align-items:center;justify-content:center;background:#eef2ff;color:var(--brand-2)}
+  .table-card.occupied .table-icon{background:#fff0b3;color:#8a5b00}
+  .table-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:#fff1f2;color:#dc3545;font-size:16px;line-height:1;flex-shrink:0}
+  .table-remove-btn:hover:not(:disabled){background:#dc3545;color:#fff}
+  .table-remove-btn:disabled{opacity:.4;cursor:not-allowed}
+  .table-remove-btn:focus-visible{outline:2px solid #dc3545;outline-offset:2px}
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="m-0">Tables</h3>
+  <a href="{% url 'pos_sale_create' %}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>New Order</a>
+</div>
+
+<form method="post" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  {% csrf_token %}
+  <label for="{{ form.seats.id_for_label }}" class="form-label mb-0">Seats</label>
+  <div>{{ form.seats }}</div>
+  <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add Table</button>
+  {% for error in form.seats.errors %}<div class="text-danger w-100">{{ error }}</div>{% endfor %}
+  {{ form.non_field_errors }}
+</form>
+
+<div class="row g-3">
+  <div class="col-12">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Table Status</span>
+        <span class="small text-muted">{{ tables|length }} table{{ tables|length|pluralize }}</span>
+      </div>
+      <div class="card-body">
+        {% if tables %}
+          <div class="table-card-grid">
+            {% for table in tables %}
+              <article class="table-card {% if table.status == 'occupied' %}occupied{% endif %} {% if not table.is_active %}inactive{% endif %} p-3">
+                <div>
+                  <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                    <span class="table-icon"><i class="bi bi-grid-3x3-gap"></i></span>
+                    <div class="d-flex align-items-center gap-2">
+                    <span class="badge {% if table.status == 'occupied' %}text-bg-warning{% else %}text-bg-success{% endif %}">{{ table.get_status_display }}</span>
+                      <form method="post" action="{% url 'restaurant_table_delete' table.id %}" onsubmit="return confirm('Remove this table?');">
+                        {% csrf_token %}
+                        <button type="submit" class="table-remove-btn" aria-label="Remove {{ table.name }}" title="Remove table" {% if table.open_order or table.status == 'occupied' %}disabled{% endif %}><span aria-hidden="true">&times;</span></button>
+                      </form>
+                    </div>
+                  </div>
+                  <h4 class="h5 mb-1"><a class="text-decoration-none text-reset" href="{% if table.open_order %}{% url 'sale_update' table.open_order.id %}{% else %}{% url 'pos_sale_create' %}?table={{ table.id }}{% endif %}">{{ table.name }}</a></h4>
+                  <div class="small text-muted">{{ table.seats }} seat{{ table.seats|pluralize }}</div>
+                  {% if table.open_order %}
+                    <div class="small mt-2">INV-{{ table.open_order.id }} / {{ table.open_order.waiter|default:'No waiter' }}</div>
+                    <div class="fw-semibold">Rs. {{ table.open_order.total|floatformat:2 }}</div>
+                  {% endif %}
+                </div>
+                <div class="mt-3">
+                  {% if table.open_order %}
+                    <a class="btn btn-sm btn-primary w-100" href="{% url 'sale_update' table.open_order.id %}">Open Order</a>
+                  {% else %}
+                    <a class="btn btn-sm btn-outline-primary w-100" href="{% url 'pos_sale_create' %}?table={{ table.id }}">New Order</a>
+                  {% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-center text-muted py-5">No tables added yet.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-semibold">Open Orders</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>Order</th><th>Table</th><th>Waiter</th><th>Total</th><th></th></tr></thead>
+          <tbody>
+            {% for order in open_orders %}
+            <tr><td>INV-{{ order.id }}</td><td>{{ order.restaurant_table|default:'-' }}</td><td>{{ order.waiter|default:'-' }}</td><td>Rs. {{ order.total|floatformat:2 }}</td><td class="text-end"><a class="btn btn-sm btn-primary" href="{% url 'sale_update' order.id %}">Open</a></td></tr>
+            {% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No open orders.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

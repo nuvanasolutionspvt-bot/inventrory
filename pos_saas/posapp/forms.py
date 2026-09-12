@@ -6,13 +6,14 @@ from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import slugify
 
 from .models import (
     Product, ProductSet, Category, Supplier, Customer,
     Purchase, Sale, SiteSetting, Tenant, TenantMembership,
-    SubscriptionPlan, TenantSubscription
+    SubscriptionPlan, TenantSubscription, TenantFeature, RestaurantTable
 )
 
 # ---------------------------
@@ -21,9 +22,28 @@ from .models import (
 
 APP_LABEL = 'posapp'
 
+RESTAURANT_MODULE_CHOICES = (
+    ('pos_billing', 'POS Billing'),
+    ('products_catalog', 'Products & Catalog'),
+    ('kot_management', 'KOT Management'),
+    ('table_management', 'Table Management'),
+    ('kitchen_display', 'Kitchen Display (KDS)'),
+    ('online_payment', 'Online Payment'),
+    ('inventory', 'Inventory'),
+)
+RESTAURANT_REQUIRED_MODULES = {'pos_billing'}
+RESTAURANT_DEFAULT_MODULES = {'pos_billing', 'products_catalog'}
+CUSTOM_PERMISSION_CODENAMES = {
+    'can_pos', 'can_view_reports', 'can_print_barcodes', 'can_adjust_stock',
+    'can_manage_purchases', 'can_manage_settings', 'can_manage_users',
+    'can_credit_receive', 'can_credit_charge', 'can_credit_view',
+    'can_manage_kot', 'can_view_kds',
+}
+
 BUSINESS_PERMISSION_CODENAMES = {
     'restaurant': {
         'can_pos', 'can_view_reports', 'can_manage_settings', 'can_manage_users',
+        'can_manage_kot', 'can_view_kds',
         'view_product', 'add_product', 'change_product',
         'view_sale', 'add_sale', 'change_sale',
         'view_customer', 'add_customer', 'change_customer',
@@ -64,7 +84,7 @@ BUSINESS_PERMISSION_CODENAMES = {
 }
 
 BUSINESS_ROLE_NAMES = {
-    'restaurant': {'Restaurant Admin', 'Restaurant Manager', 'Restaurant Cashier', 'Restaurant Viewer'},
+    'restaurant': {'Restaurant Admin', 'Restaurant Manager', 'Restaurant Cashier', 'Waiter', 'Restaurant Viewer', 'Kitchen Staff'},
     'pharmacy': {'Admin', 'Manager', 'Cashier', 'Viewer'},
     'retail_store': {'Admin', 'Manager', 'Cashier', 'Viewer'},
     'wholesale': {'Admin', 'Manager', 'Cashier', 'Viewer'},
@@ -79,6 +99,7 @@ DEFAULT_ROLE_PERMISSION_CODENAMES = {
         'view_customer', 'add_customer', 'change_customer',
     },
     'Restaurant Cashier': {'can_pos'},
+    'Waiter': {'can_pos'},
     'Restaurant Viewer': {'can_view_reports', 'view_product', 'view_sale', 'view_customer'},
 }
 
@@ -95,11 +116,14 @@ def ensure_business_roles(business_type):
 
 
 def permission_queryset_for_business(business_type):
-    qs = Permission.objects.filter(content_type__app_label=APP_LABEL).order_by('codename')
+    qs = Permission.objects.filter(content_type__app_label=APP_LABEL).filter(
+        Q(codename__in=CUSTOM_PERMISSION_CODENAMES, content_type__model='apppermission') |
+        ~Q(codename__in=CUSTOM_PERMISSION_CODENAMES)
+    ).order_by('codename')
     allowed = BUSINESS_PERMISSION_CODENAMES.get(business_type)
     if allowed is None:
         return qs
-    return qs.filter(codename__in=allowed).distinct()
+    return qs.filter(codename__in=allowed)
 
 
 def role_queryset_for_business(business_type):
@@ -153,6 +177,13 @@ class TenantRegistrationForm(forms.Form):
         choices=Tenant.BUSINESS_TYPE_CHOICES,
         label="Business type",
         widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    business_modules = forms.MultipleChoiceField(
+        choices=RESTAURANT_MODULE_CHOICES,
+        required=False,
+        initial=sorted(RESTAURANT_DEFAULT_MODULES),
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check-input"}),
+        label="Business Modules",
     )
     subscription_plan = forms.ChoiceField(
         choices=(
@@ -306,6 +337,11 @@ class TenantRegistrationForm(forms.Form):
                 validate_password(password1)
             except ValidationError as exc:
                 self.add_error('password1', exc)
+        if cleaned.get('business_type') == 'restaurant':
+            modules = set(cleaned.get('business_modules') or [])
+            missing = RESTAURANT_REQUIRED_MODULES - modules
+            if missing:
+                self.add_error('business_modules', 'POS Billing is required for restaurant businesses.')
         return cleaned
 
     def _admin_group(self):
@@ -345,6 +381,15 @@ class TenantRegistrationForm(forms.Form):
         )
         user.groups.add(self._admin_group())
         TenantMembership.objects.create(tenant=tenant, user=user, role='owner')
+        if tenant.business_type == 'restaurant':
+            selected_modules = set(self.cleaned_data.get('business_modules') or []) | RESTAURANT_REQUIRED_MODULES
+            TenantFeature.objects.update_or_create(
+                tenant=tenant,
+                defaults={field: field in selected_modules for field, _label in RESTAURANT_MODULE_CHOICES},
+            )
+        else:
+            TenantFeature.objects.get_or_create(tenant=tenant)
+
         SiteSetting.objects.get_or_create(
             tenant=tenant,
             defaults={
@@ -500,28 +545,8 @@ class TenantModelFormMixin:
             qs = qs.exclude(pk=self.instance.pk)
         return qs.exists()
 
-    def _generate_restaurant_code(self):
-        base_name = self.cleaned_data.get('name') or 'ITEM'
-        base = slugify(base_name).upper().replace('-', '')[:24] or 'ITEM'
-        code_base = f'MENU-{base}'
-        code = code_base
-        suffix = 2
-        qs = Product.objects.filter(tenant=self.tenant, code=code)
-        if self.instance and self.instance.pk:
-            qs = qs.exclude(pk=self.instance.pk)
-        while qs.exists():
-            suffix_text = f'-{suffix}'
-            code = f'{code_base[:64 - len(suffix_text)]}{suffix_text}'
-            qs = Product.objects.filter(tenant=self.tenant, code=code)
-            if self.instance and self.instance.pk:
-                qs = qs.exclude(pk=self.instance.pk)
-            suffix += 1
-        return code
-
     def save(self, commit=True):
         obj = super().save(commit=False)
-        if self.is_restaurant_tenant and not obj.code:
-            obj.code = self._generate_restaurant_code()
         if self.tenant is not None and hasattr(obj, 'tenant_id') and not obj.tenant_id:
             obj.tenant = self.tenant
         if commit:
@@ -531,7 +556,19 @@ class TenantModelFormMixin:
         return obj
 
 
-class UserCreateForm(forms.ModelForm):
+class UserPermissionsForm(forms.ModelForm):
+    user_permissions = forms.ModelMultipleChoiceField(
+        queryset=Permission.objects.none(), required=False, label="Permissions",
+        widget=forms.SelectMultiple(attrs={
+            "class": "form-select js-enhance-select",
+            "data-placeholder": "Select user permissions",
+            "data-max-items": "200",
+        }),
+        help_text="Assign permissions directly to this user. Roles are optional. Permissions from selected roles also apply.",
+    )
+
+
+class UserCreateForm(UserPermissionsForm):
     password1 = forms.CharField(
         widget=forms.PasswordInput(attrs={
             "class": "form-control",
@@ -568,10 +605,11 @@ class UserCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         business_type = getattr(tenant, 'business_type', None)
         self.fields['groups'].queryset = role_queryset_for_business(business_type)
+        self.fields['user_permissions'].queryset = permission_queryset_for_business(business_type)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'is_staff', 'is_active', 'groups']
+        fields = ['username', 'email', 'is_staff', 'is_active', 'groups', 'user_permissions']
         widgets = {
             'username': forms.TextInput(attrs={
                 "class": "form-control",
@@ -601,7 +639,7 @@ class UserCreateForm(forms.ModelForm):
         return user
 
 
-class UserEditForm(forms.ModelForm):
+class UserEditForm(UserPermissionsForm):
     password1 = forms.CharField(
         widget=forms.PasswordInput(attrs={
             "class": "form-control",
@@ -637,10 +675,11 @@ class UserEditForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         business_type = getattr(tenant, 'business_type', None)
         self.fields['groups'].queryset = role_queryset_for_business(business_type)
+        self.fields['user_permissions'].queryset = permission_queryset_for_business(business_type)
 
     class Meta:
         model = User
-        fields = ['email', 'is_staff', 'is_active', 'groups']
+        fields = ['email', 'is_staff', 'is_active', 'groups', 'user_permissions']
         widgets = {
             'email': forms.EmailInput(attrs={
                 "class": "form-control",
@@ -765,6 +804,7 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
     def is_restaurant_tenant(self):
         return bool(self.tenant and self.tenant.business_type == 'restaurant')
 
+
     def _generate_restaurant_code(self):
         base_name = self.cleaned_data.get('name') or 'ITEM'
         base = slugify(base_name).upper().replace('-', '')[:24] or 'ITEM'
@@ -782,7 +822,6 @@ class ProductForm(TenantModelFormMixin, forms.ModelForm):
                 qs = qs.exclude(pk=self.instance.pk)
             suffix += 1
         return code
-
     def save(self, commit=True):
         obj = super().save(commit=False)
         if self.is_restaurant_tenant and not obj.code:
@@ -928,7 +967,7 @@ class SaleForm(TenantModelFormMixin, forms.ModelForm):
     is_return = forms.BooleanField(required=False, label='Return (Credit Note)')
     class Meta:
         model = Sale
-        fields = ['customer','date','discount','payment_method','paid_amount','is_return']
+        fields = ['customer','date','discount','payment_method','paid_amount','is_return','restaurant_table','waiter']
         widgets = {
             'customer': forms.Select(attrs={
                 "class": "form-select js-enhance-select",
@@ -942,15 +981,40 @@ class SaleForm(TenantModelFormMixin, forms.ModelForm):
                 "data-placeholder": "Payment method"
             }),
             'paid_amount': forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0", "placeholder": "0.00"}),
+            'restaurant_table': forms.Select(attrs={"class": "form-select js-enhance-select", "data-placeholder": "Select table"}),
+            'waiter': forms.Select(attrs={"class": "form-select js-enhance-select", "data-placeholder": "Select waiter"}),
             'is_return': forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if (self.is_bound and self.data.get('sale_action') == 'generate_kot'
+                and getattr(self.tenant, 'business_type', None) == 'restaurant'):
+            # Kitchen orders do not collect payment or create returns.
+            for name, value in [('payment_method', 'cash'), ('paid_amount', Decimal('0.00')), ('is_return', False)]:
+                self.initial[name] = value
+                self.fields[name].disabled = True
         if self.tenant is not None:
             self.fields['customer'].queryset = Customer.objects.filter(tenant=self.tenant).order_by('name')
+            self.fields['restaurant_table'].queryset = RestaurantTable.objects.filter(tenant=self.tenant, is_active=True).order_by('name')
+            self.fields['waiter'].queryset = User.objects.filter(tenant_memberships__tenant=self.tenant, tenant_memberships__is_active=True, groups__name='Waiter').distinct().order_by('username')
         else:
             self.fields['customer'].queryset = Customer.objects.none()
+            self.fields['restaurant_table'].queryset = RestaurantTable.objects.none()
+            self.fields['waiter'].queryset = User.objects.none()
+
+
+class RestaurantTableForm(TenantModelFormMixin, forms.ModelForm):
+    seats = forms.TypedChoiceField(
+        choices=[(n, f'{n} seat' if n == 1 else f'{n} seats') for n in range(1, 21)],
+        coerce=int,
+        initial=4,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+    class Meta:
+        model = RestaurantTable
+        fields = ['seats']
 
 # ---------------------------
 # Stock
@@ -996,10 +1060,6 @@ class SiteSettingForm(forms.ModelForm):
             # Org/Bill
             'org_name','org_address','org_phone','org_email',
             'bill_title','bill_footer','bill_tax_inclusive','restaurant_menu_tax_percent','printer_type','payment_qr',
-            # SMS
-            'sms_enabled','sms_provider','sms_api_key','sms_sender',
-            # Calls
-            'call_enabled','call_provider','call_sid','call_token','call_from',
         ]
         widgets = {
             'org_name': forms.TextInput(attrs={"class": "form-control", "placeholder": "Your store name"}),
@@ -1148,3 +1208,8 @@ class CustomerStatementFilterForm(forms.Form):
         super().__init__(*args, **kwargs)
         if tenant is not None:
             self.fields['customer'].queryset = Customer.objects.filter(tenant=tenant).order_by('name')
+
+
+
+
+

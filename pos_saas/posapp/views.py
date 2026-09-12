@@ -1,3 +1,5 @@
+from django.urls import reverse
+from django.views.decorators.http import require_POST
 from datetime import date, timedelta
 from decimal import Decimal
 import base64
@@ -29,12 +31,12 @@ from .forms import (
     UserCreateForm, UserEditForm, RoleForm, RolePermissionForm,
     TenantRegistrationForm, CompanyBusinessCreateForm, CompanyBusinessEditForm,
     # NEW credit forms
-    ReceivePaymentForm, CustomerChargeForm, CustomerStatementFilterForm,
+    ReceivePaymentForm, CustomerChargeForm, CustomerStatementFilterForm, RestaurantTableForm,
 )
 from .models import (
     Product, ProductBatch, ProductSet, ProductSetItem, SiteSetting, Supplier, Customer, Purchase, PurchaseItem,
     Sale, SaleItem, StockMove, Category, CustomerLedger, TenantMembership,
-    SubscriptionPlan, TenantSubscription, SubscriptionPaymentOrder, Tenant
+    SubscriptionPlan, TenantSubscription, SubscriptionPaymentOrder, Tenant, TenantFeature, KitchenOrderTicket, RestaurantTable
 )
 from .tenancy import SESSION_TENANT_KEY, require_active_tenant
 import csv, io, json
@@ -160,6 +162,34 @@ def _business_rows():
     return rows
 
 
+
+def _tenant_kot_enabled(tenant):
+    features, _created = TenantFeature.objects.get_or_create(
+        tenant=tenant,
+        defaults={'pos_billing': True, 'products_catalog': True},
+    )
+    return bool(features.kot_management)
+
+
+def _restaurant_order_redirect(request, tenant):
+    features, _created = TenantFeature.objects.get_or_create(tenant=tenant, defaults={'pos_billing': True, 'products_catalog': True})
+    if features.table_management and request.user.has_perm('posapp.can_pos'):
+        return redirect('restaurant_tables')
+    return redirect('pos_sale_create')
+
+def _set_restaurant_table_status(table, status):
+    if table:
+        RestaurantTable.objects.filter(pk=table.pk, tenant=table.tenant).update(status=status)
+
+def _create_kot_for_sale(sale):
+    if sale.tenant.business_type != 'restaurant' or sale.is_return or not _tenant_kot_enabled(sale.tenant):
+        return None
+    kot, _created = KitchenOrderTicket.objects.get_or_create(
+        tenant=sale.tenant,
+        sale=sale,
+        defaults={'ticket_no': f'KOT-{sale.id}'},
+    )
+    return kot
 def _send_sms_if_enabled(customer: Customer, message: str):
     """Lightweight SMS hook. Replace with real gateway call if needed."""
     s = SiteSetting.get(customer.tenant)
@@ -969,7 +999,24 @@ def dashboard(request):
             .select_related('customer')
             .order_by('-date', '-id')[:8]
         )
+        is_cashier = request.user.groups.filter(name__in=['Cashier', 'Restaurant Cashier']).exists()
+        open_orders_page = None
+        page_size = 10
+        if is_cashier:
+            try:
+                page_size = int(request.GET.get('page_size', 10))
+            except (TypeError, ValueError):
+                page_size = 10
+            if page_size not in (10, 25, 50, 100):
+                page_size = 10
+            open_orders = Sale.objects.filter(
+                tenant=tenant, order_status=Sale.ORDER_STATUS_OPEN, is_return=False,
+            ).select_related('restaurant_table', 'waiter', 'customer').order_by('-date', '-id')
+            open_orders_page = Paginator(open_orders, page_size).get_page(request.GET.get('page'))
         return render(request, 'restaurant/dashboard.html', {
+            'is_cashier': is_cashier,
+            'open_orders_page': open_orders_page,
+            'page_size': page_size,
             'today_sales': today_total,
             'today_bills': today_bills,
             'average_bill': today_total / today_bills if today_bills else Decimal('0.00'),
@@ -1882,6 +1929,7 @@ def pos_sale_create(request):
     products, product_sets, product_batches = _pos_catalog(tenant)
     is_pharmacy = tenant.business_type == 'pharmacy'
     is_restaurant = tenant.business_type == 'restaurant'
+    is_waiter = is_restaurant and request.user.groups.filter(name='Waiter').exists()
     pos_template = 'sales/restaurant_pos.html' if is_restaurant else 'sales/pos.html'
     restaurant_categories = Category.objects.filter(
         tenant=tenant, product__is_active=True
@@ -1896,8 +1944,34 @@ def pos_sale_create(request):
             payload.update(extra)
         return JsonResponse(payload, status=status)
 
+    selected_table = None
+    if is_restaurant and request.GET.get('table'):
+        selected_table = get_object_or_404(
+            RestaurantTable, tenant=tenant, is_active=True, pk=request.GET['table'],
+        )
+        existing_order = Sale.objects.filter(
+            tenant=tenant, restaurant_table=selected_table, order_status=Sale.ORDER_STATUS_OPEN,
+        ).first()
+        if existing_order:
+            return redirect('sale_update', sale_id=existing_order.pk)
+
+    def assign_order_defaults(form):
+        if selected_table:
+            form.fields['restaurant_table'].initial = selected_table.pk
+            form.initial['restaurant_table'] = selected_table.pk
+            form.fields['restaurant_table'].disabled = True
+        if is_waiter:
+            form.initial['waiter'] = request.user.pk
+            form.fields['waiter'].disabled = True
+        return form
+
     if request.method == 'POST':
-        form = SaleForm(request.POST, tenant=tenant)
+        form = assign_order_defaults(SaleForm(request.POST, tenant=tenant))
+        sale_action = request.POST.get('sale_action') or 'complete'
+        if is_restaurant and sale_action == 'generate_kot' and not _tenant_kot_enabled(tenant):
+            raise PermissionDenied('KOT Management is not enabled for this business.')
+        if is_waiter and sale_action != 'generate_kot':
+            raise PermissionDenied('Waiter can generate KOT but cannot complete billing.')
         vals = request.POST.getlist('items_json')
         items_json = next((v for v in reversed(vals) if (v or '').strip()), '[]')
         try:
@@ -1925,6 +1999,7 @@ def pos_sale_create(request):
                     'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                     'items_json': items_json, 'site_settings': site_settings,
                     'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
                 })
 
             # --- HARD STOCK CHECK (normal sales only) ---
@@ -1958,6 +2033,7 @@ def pos_sale_create(request):
                             'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'site_settings': site_settings,
                             'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
                         })
 
             # --- totals (pre-sign) ---
@@ -1991,6 +2067,7 @@ def pos_sale_create(request):
                             'product_batches': product_batches, 'is_pharmacy': is_pharmacy,
                             'site_settings': site_settings,
                             'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
                         })
 
             # sign & save sale
@@ -1999,11 +2076,25 @@ def pos_sale_create(request):
             sale.tax *= sign
             sale.total *= sign
             sale.created_by = request.user
+            if is_restaurant and sale_action == 'generate_kot':
+                sale.order_status = Sale.ORDER_STATUS_OPEN
+                sale.paid_amount = Decimal('0.00')
+            else:
+                sale.order_status = Sale.ORDER_STATUS_PAID
             sale.save()
 
             # items + stock
             for line in lines:
                 _create_sale_line_and_stock(sale, line, sign)
+
+            kot = _create_kot_for_sale(sale)
+            if is_restaurant and sale.restaurant_table:
+                table_status = RestaurantTable.STATUS_OCCUPIED if sale.order_status == Sale.ORDER_STATUS_OPEN else RestaurantTable.STATUS_AVAILABLE
+                _set_restaurant_table_status(sale.restaurant_table, table_status)
+
+            if is_restaurant and sale_action == 'generate_kot':
+                messages.success(request, f'{kot.ticket_no if kot else "KOT"} generated and sent to kitchen.')
+                return _restaurant_order_redirect(request, tenant)
 
             # ledger posting & alert
             _post_ledger_for_sale(sale)
@@ -2047,10 +2138,11 @@ def pos_sale_create(request):
             'items_json': items_json,
             'site_settings': site_settings,
             'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
         })
 
     # GET
-    form = SaleForm(initial={'date': date.today()}, tenant=tenant)
+    form = assign_order_defaults(SaleForm(initial={'date': date.today()}, tenant=tenant))
     return render(request, pos_template, {
         'form': form,
         'products': products,
@@ -2059,13 +2151,15 @@ def pos_sale_create(request):
         'is_pharmacy': is_pharmacy,
         'site_settings': site_settings,
         'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
     })
 
 
 
 @login_required
-@permission_required('posapp.view_sale', raise_exception=True)
 def invoice_view(request, sale_id):
+    if not (request.user.has_perm('posapp.view_sale') or request.user.has_perm('posapp.can_pos')):
+        raise PermissionDenied
     tenant = _tenant(request)
     sale = get_object_or_404(Sale.objects.select_related('customer'), tenant=tenant, pk=sale_id)
     items = SaleItem.objects.filter(sale=sale).select_related('product', 'product_set')
@@ -2616,6 +2710,7 @@ def sale_update(request, sale_id):
     products, product_sets, product_batches = _pos_catalog(tenant)
     is_pharmacy = tenant.business_type == 'pharmacy'
     is_restaurant = tenant.business_type == 'restaurant'
+    is_waiter = is_restaurant and request.user.groups.filter(name='Waiter').exists()
     pos_template = 'sales/restaurant_pos.html' if is_restaurant else 'sales/pos.html'
     restaurant_categories = Category.objects.filter(
         tenant=tenant, product__is_active=True
@@ -2647,8 +2742,12 @@ def sale_update(request, sale_id):
                 lines = []
 
         if form.is_valid() and lines:
+            previous_table = sale.restaurant_table
             sale = form.save(commit=False)
             sale.tenant = tenant
+            sale_action = request.POST.get('sale_action') or 'complete'
+            if is_waiter and sale_action != 'generate_kot':
+                raise PermissionDenied('Waiter can generate KOT but cannot complete billing.')
 
             subtotal = Decimal('0.00')
             tax_total = Decimal('0.00')
@@ -2680,6 +2779,7 @@ def sale_update(request, sale_id):
                             'items_json': '[]',
                             'site_settings': SiteSetting.get(tenant),
                             'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
                         })
 
             # Validation has passed; now safely undo and rebuild postings.
@@ -2696,10 +2796,26 @@ def sale_update(request, sale_id):
             sale.subtotal *= sign
             sale.tax *= sign
             sale.total *= sign
+            if is_restaurant and sale_action == 'generate_kot':
+                sale.order_status = Sale.ORDER_STATUS_OPEN
+                sale.paid_amount = Decimal('0.00')
+            else:
+                sale.order_status = Sale.ORDER_STATUS_PAID
             sale.save()
 
             for line in lines:
                 _create_sale_line_and_stock(sale, line, sign)
+
+            if is_restaurant:
+                kot = _create_kot_for_sale(sale)
+                if previous_table and previous_table != sale.restaurant_table:
+                    _set_restaurant_table_status(previous_table, RestaurantTable.STATUS_AVAILABLE)
+                if sale.restaurant_table:
+                    table_status = RestaurantTable.STATUS_OCCUPIED if sale.order_status == Sale.ORDER_STATUS_OPEN else RestaurantTable.STATUS_AVAILABLE
+                    _set_restaurant_table_status(sale.restaurant_table, table_status)
+                if sale_action == 'generate_kot':
+                    messages.success(request, f'{kot.ticket_no if kot else "KOT"} updated and sent to kitchen.')
+                    return _restaurant_order_redirect(request, tenant)
 
             _post_ledger_for_sale(sale)
             if will_add_debit > 0:
@@ -2747,10 +2863,135 @@ def sale_update(request, sale_id):
         'items_json': prefill_json,
         'site_settings': SiteSetting.get(tenant),
         'restaurant_categories': restaurant_categories,
+                    'is_waiter': is_waiter,
     })
 
 
+RESTAURANT_MODULE_PAGES = {
+    'kot': ('kot_management', 'Kitchen Orders', 'bi-receipt-cutoff'),
+    'tables': ('table_management', 'Tables', 'bi-grid-3x3-gap'),
+    'kds': ('kitchen_display', 'Kitchen Display', 'bi-display'),
+    'online-payment': ('online_payment', 'Online Payment', 'bi-credit-card-2-front'),
+    'inventory': ('inventory', 'Inventory', 'bi-boxes'),
+}
+
+
+@login_required
+def restaurant_module_page(request, module):
+    tenant = _tenant(request)
+    if tenant.business_type != 'restaurant':
+        return redirect('dashboard')
+    field, title, icon = RESTAURANT_MODULE_PAGES.get(module, (None, None, None))
+    if not field:
+        raise PermissionDenied('Unknown restaurant module.')
+    features, _created = TenantFeature.objects.get_or_create(
+        tenant=tenant,
+        defaults={'pos_billing': True, 'products_catalog': True},
+    )
+    if not getattr(features, field, False):
+        raise PermissionDenied('This module is not enabled for this tenant.')
+    return render(request, 'restaurant/module.html', {'title': title, 'icon': icon})
+
 # --------------------------
+
+@login_required
+@permission_required('posapp.can_pos', raise_exception=True)
+def restaurant_tables(request):
+    tenant = _tenant(request)
+    features, _created = TenantFeature.objects.get_or_create(tenant=tenant, defaults={'pos_billing': True, 'products_catalog': True})
+    if tenant.business_type != 'restaurant' or not features.table_management:
+        raise PermissionDenied('Table Management is not enabled for this tenant.')
+    if request.method == 'POST':
+        form = RestaurantTableForm(request.POST, tenant=tenant)
+        if form.is_valid():
+            with transaction.atomic():
+                # Serialize automatic numbering within this business.
+                type(tenant).objects.select_for_update().get(pk=tenant.pk)
+                names = RestaurantTable.objects.filter(tenant=tenant).values_list('name', flat=True)
+                numbers = []
+                for name in names:
+                    suffix = name.replace(' ', '')
+                    if suffix.startswith('Table') and suffix[5:].isascii() and suffix[5:].isdigit():
+                        numbers.append(int(suffix[5:]))
+                table = form.save(commit=False)
+                table.tenant = tenant
+                table.name = f'Table{max(numbers, default=0) + 1}'
+                table.is_active = True
+                table.save()
+            messages.success(request, f'{table.name} added.')
+            return redirect('restaurant_tables')
+    else:
+        form = RestaurantTableForm(tenant=tenant)
+    tables = list(RestaurantTable.objects.filter(tenant=tenant).order_by('id'))
+    open_orders = Sale.objects.filter(tenant=tenant, order_status=Sale.ORDER_STATUS_OPEN).select_related('restaurant_table', 'waiter')
+    open_by_table = {order.restaurant_table_id: order for order in open_orders if order.restaurant_table_id}
+    for table in tables:
+        table.open_order = open_by_table.get(table.id)
+    return render(request, 'restaurant/tables.html', {'form': form, 'tables': tables, 'open_orders': open_orders})
+
+@login_required
+@permission_required('posapp.can_pos', raise_exception=True)
+@require_POST
+def restaurant_table_delete(request, table_id):
+    tenant = _tenant(request)
+    if tenant.business_type != 'restaurant' or not TenantFeature.objects.filter(tenant=tenant, table_management=True).exists():
+        raise PermissionDenied('Table Management is not enabled for this tenant.')
+    with transaction.atomic():
+        table = get_object_or_404(RestaurantTable.objects.select_for_update(), tenant=tenant, pk=table_id)
+        if table.status == RestaurantTable.STATUS_OCCUPIED or Sale.objects.filter(
+            tenant=tenant, restaurant_table=table, order_status=Sale.ORDER_STATUS_OPEN,
+        ).exists():
+            messages.error(request, 'Close the open order before removing this table.')
+        else:
+            name = table.name
+            table.delete()
+            messages.success(request, f'{name} removed.')
+    return redirect('restaurant_tables')
+
+
+@login_required
+@permission_required('posapp.can_manage_kot', raise_exception=True)
+def kitchen_orders(request):
+    tenant = _tenant(request)
+    if tenant.business_type != 'restaurant' or not _tenant_kot_enabled(tenant):
+        raise PermissionDenied('Kitchen Orders is not enabled for this tenant.')
+    orders = KitchenOrderTicket.objects.filter(tenant=tenant).select_related('sale', 'sale__customer').prefetch_related('sale__saleitem_set__product')
+    status_filter = request.GET.get('status', '').strip()
+    if status_filter in dict(KitchenOrderTicket.STATUS_CHOICES):
+        orders = orders.filter(status=status_filter)
+    return render(request, 'restaurant/kitchen_orders.html', {'orders': orders, 'status_filter': status_filter})
+
+
+@login_required
+@permission_required('posapp.can_manage_kot', raise_exception=True)
+def kitchen_order_status(request, kot_id):
+    tenant = _tenant(request)
+    if tenant.business_type != 'restaurant' or not _tenant_kot_enabled(tenant):
+        raise PermissionDenied('Kitchen Orders is not enabled for this tenant.')
+    kot = get_object_or_404(KitchenOrderTicket, tenant=tenant, pk=kot_id)
+    if request.method == 'POST':
+        status = request.POST.get('status')
+        allowed = dict(KitchenOrderTicket.STATUS_CHOICES)
+        if status in allowed:
+            kot.status = status
+            kot.save(update_fields=['status', 'updated_at'])
+            messages.success(request, f'{kot.ticket_no} marked {allowed[status]}.')
+        else:
+            messages.error(request, 'Invalid kitchen order status.')
+    return redirect(request.POST.get('next') or 'kitchen_orders')
+
+
+@login_required
+@permission_required('posapp.can_view_kds', raise_exception=True)
+def kitchen_display(request):
+    tenant = _tenant(request)
+    if tenant.business_type != 'restaurant':
+        raise PermissionDenied('Kitchen Display is available only for restaurant tenants.')
+    features, _created = TenantFeature.objects.get_or_create(tenant=tenant, defaults={'pos_billing': True, 'products_catalog': True})
+    if not (features.kot_management or features.kitchen_display):
+        raise PermissionDenied('Kitchen Display is not enabled for this tenant.')
+    orders = KitchenOrderTicket.objects.filter(tenant=tenant).exclude(status=KitchenOrderTicket.STATUS_READY).select_related('sale').prefetch_related('sale__saleitem_set__product').order_by('created_at')
+    return render(request, 'restaurant/kitchen_display.html', {'orders': orders})
 # Security (users & roles)
 # --------------------------
 
@@ -2793,6 +3034,23 @@ def security_user_edit(request, user_id):
     else:
         form = UserEditForm(instance=user, initial={'groups': user.groups.all()}, tenant=tenant)
     return render(request, 'security/user_form.html', {'form': form, 'title': f'Edit User — {user.username}'})
+
+
+@permission_required('posapp.can_manage_users', raise_exception=True)
+@require_POST
+def security_user_delete(request, user_id):
+    tenant = _tenant(request)
+    membership = get_object_or_404(
+        TenantMembership.objects.select_related('user'), tenant=tenant, user_id=user_id,
+    )
+    user = membership.user
+    if user.pk == request.user.pk or user.is_superuser or membership.role == 'owner':
+        messages.error(request, "You cannot delete your own access, a business owner, or a platform superuser.")
+        return redirect('security_users')
+    username = user.username
+    membership.delete()
+    messages.success(request, f"User '{username}' removed from this business.")
+    return redirect('security_users')
 
 
 @permission_required('posapp.can_manage_users', raise_exception=True)
@@ -3364,3 +3622,41 @@ def backup_restore_upload(request):
 
     messages.success(request, 'Database restored from uploaded backup. Please restart the app if required.')
     return redirect('settings_general')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@login_required
+@permission_required('posapp.can_pos', raise_exception=True)
+def waiter_order_notifications(request):
+    tenant = _tenant(request)
+    from .context_processors import kitchen_notifications_admin
+    is_admin = kitchen_notifications_admin(request.user, tenant)
+    if (tenant.business_type != 'restaurant' or not _tenant_kot_enabled(tenant)
+            or not (is_admin or request.user.groups.filter(name='Waiter').exists())):
+        raise PermissionDenied('Kitchen notifications are unavailable.')
+    orders = KitchenOrderTicket.objects.filter(
+        tenant=tenant, sale__tenant=tenant,
+        sale__order_status=Sale.ORDER_STATUS_OPEN,
+    )
+    if not is_admin:
+        orders = orders.filter(sale__waiter=request.user)
+    orders = orders.select_related('sale__restaurant_table').order_by('-updated_at', '-id')
+    response = JsonResponse({'orders': [{
+        'id': kot.pk, 'ticket': kot.ticket_no, 'order': kot.sale_id,
+        'table': kot.sale.restaurant_table.name if kot.sale.restaurant_table else 'Takeaway',
+        'status': kot.status, 'status_label': kot.get_status_display(),
+        'url': reverse('sale_update', args=[kot.sale_id]),
+    } for kot in orders]})
+    response['Cache-Control'] = 'no-store'
+    return response
