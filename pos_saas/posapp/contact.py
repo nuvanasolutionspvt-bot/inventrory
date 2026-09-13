@@ -65,8 +65,23 @@ def contact_us(request):
         except OSError:
             return failure('GOOGLE_CONNECTION_ERROR', 'The server could not connect to Google.', 502)
         if not isinstance(result, dict) or result.get('ok') is not True:
-            return failure('GOOGLE_SUBMISSION_REJECTED',
-                'Apps Script rejected the submission. Check CONTACT_TOKEN matches the server token and the script can access the sheet.', 502)
+            error_messages = {
+                'SCRIPT_TOKEN_MISSING': 'Apps Script has no CONTACT_TOKEN script property. Add it in Project Settings.',
+                'TOKEN_MISMATCH': 'Apps Script CONTACT_TOKEN does not match the token loaded by Django.',
+                'INVALID_FIELD': 'Apps Script rejected a required form field.',
+                'INVALID_JSON': 'Apps Script could not parse the submitted JSON.',
+                'SHEET_WRITE_FAILED': 'Apps Script could not save the enquiry. Open Apps Script Executions to see the sheet error.',
+            }
+            upstream_code = result.get('code') if isinstance(result, dict) else None
+            if isinstance(upstream_code, str) and upstream_code in error_messages:
+                details = {'upstream_code': upstream_code}
+                field = result.get('field')
+                if isinstance(field, str) and field in ContactForm.base_fields:
+                    details['field'] = field
+                return failure(upstream_code, error_messages[upstream_code], 502, **details)
+            return failure('GOOGLE_ERROR_DETAILS_MISSING',
+                'The deployed Apps Script returned no recognized error code. Deploy the updated Code.gs as a new version.', 502,
+                upstream_code='UNKNOWN')
         if wants_json:
             return JsonResponse({'ok': True, 'message': 'Thank you! Your enquiry has been received.'})
         messages.success(request, 'Thank you! Your enquiry has been received.')

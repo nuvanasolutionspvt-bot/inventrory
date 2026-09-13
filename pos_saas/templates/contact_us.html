@@ -31,6 +31,7 @@ document.getElementById('contactForm').addEventListener('submit', async function
     output.style.background = response.ok && data.ok ? '#e7f7ec' : '#fff0f0';
     output.textContent = data.message || 'Submission failed.';
     if (data.code) output.textContent += ' [' + data.code + ']';
+    if (data.field) output.textContent += ' Field: ' + data.field;
     if (data.missing_settings) output.textContent += ' Missing: ' + data.missing_settings.join(', ');
     if (data.errors) Object.entries(data.errors).forEach(([field, errors]) => { output.textContent += ' ' + field + ': ' + errors.map(e => e.message).join(' '); });
     if (response.ok && data.ok) form.reset();
