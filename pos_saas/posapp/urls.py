@@ -1,7 +1,10 @@
+from .contact import contact_us
+from django.views.generic import TemplateView
 from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('contact-us/', contact_us, name='contact_us'),
     path('restaurant/waiter/notifications/', views.waiter_order_notifications, name='waiter_order_notifications'),
     path('', views.dashboard, name='dashboard'),
     path('register/', views.register, name='register'),

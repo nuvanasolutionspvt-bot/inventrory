@@ -175,3 +175,7 @@ LOGGING = {
         },
     },
 }
+
+# Contact form -> Google Apps Script web app (keep the token server-side).
+CONTACT_APPS_SCRIPT_URL = os.environ.get('CONTACT_APPS_SCRIPT_URL', 'https://script.google.com/macros/s/AKfycbzJqguFM_CBJBripeDBY68beh__mdIVAOzPhA6j6ZsicQUKJbbETsAwQQKvGI-xLCKE/exec')
+CONTACT_APPS_SCRIPT_TOKEN = os.environ.get('CONTACT_APPS_SCRIPT_TOKEN', '')
