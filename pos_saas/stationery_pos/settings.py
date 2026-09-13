@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import sys
+from dotenv import load_dotenv
 
 # PyInstaller bundle detection and path handling
 if getattr(sys, 'frozen', False):
@@ -12,6 +13,9 @@ else:
     # Running in normal Python environment
     BASE_DIR = Path(__file__).resolve().parent.parent
     STATIC_FILES_IN_BUNDLE = False
+
+# Read project configuration before evaluating environment-based settings.
+load_dotenv(BASE_DIR / '.env', override=False)
 
 # Security settings
 SECRET_KEY = 'django-insecure-replace-me-with-a-real-secret-key'

@@ -10,7 +10,7 @@
 <section class="contact-card" aria-labelledby="contact-title"><header><span class="heading-icon"><i class="bi bi-chat-dots" aria-hidden="true"></i></span><div><h2 id="contact-title">Contact Us</h2><p>Tell us about your business. We'd love to help.</p></div></header>
 {% for message in messages %}<p role="status" style="padding:12px;background:#e7f7ec;color:#176b35;border-radius:8px">{{ message }}</p>{% endfor %}
 {% if form.errors %}<div role="alert" style="padding:12px;background:#fff0f0;color:#9d2020;border-radius:8px">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}{% for field in form %}{% for error in field.errors %}<p>{{ field.label }}: {{ error }}</p>{% endfor %}{% endfor %}</div>{% endif %}
-<form method="post">{% csrf_token %}
+<div id="contactResult" role="status" hidden style="padding:12px;margin-bottom:14px;border-radius:8px"></div><form method="post" id="contactForm">{% csrf_token %}
 <div class="field-row"><i class="bi bi-person" aria-hidden="true"></i><div><label for="contactName">Name <span>*</span></label><input id="contactName" name="name" value="{{ form.name.value|default_if_none:'' }}" autocomplete="name" placeholder="Your full name" maxlength="150" required></div></div>
 <div class="field-row"><i class="bi bi-telephone" aria-hidden="true"></i><div><label for="contactPhone">Phone Number <span>*</span></label><input id="contactPhone" name="phone" value="{{ form.phone.value|default_if_none:'' }}" type="tel" autocomplete="tel" placeholder="Your phone number" maxlength="32" required></div></div>
 <div class="field-row"><i class="bi bi-envelope" aria-hidden="true"></i><div><label for="contactEmail">Email <span>*</span></label><input id="contactEmail" name="email" value="{{ form.email.value|default_if_none:'' }}" type="email" autocomplete="email" placeholder="Your email address" required></div></div>
@@ -18,4 +18,23 @@
 <div class="field-row message-row"><i class="bi bi-chat-left-text" aria-hidden="true"></i><div><label for="contactMessage">Message <span>*</span></label><textarea id="contactMessage" name="message" placeholder="Tell us how we can help you..." maxlength="5000" required>{{ form.message.value|default_if_none:'' }}</textarea></div></div>
 <div class="whatsapp-row"><i class="bi bi-whatsapp" aria-hidden="true"></i><label><input type="checkbox" name="whatsapp_opt_in" {% if form.whatsapp_opt_in.value %}checked{% endif %}> Contact me on WhatsApp</label></div>
 <button class="submit-button" type="submit"><i class="bi bi-send" aria-hidden="true"></i> Submit</button><p class="response-note"><i class="bi bi-clock" aria-hidden="true"></i> We usually respond within 24 hours.</p>
-</form></section></main><footer><span>&copy; {% now 'Y' %} Nuvana POS. All rights reserved.</span><span>Simple &nbsp; | &nbsp; Smart &nbsp; | &nbsp; For a Better Tomorrow</span></footer></body></html>
+</form></section></main><footer><span>&copy; {% now 'Y' %} Nuvana POS. All rights reserved.</span><span>Simple &nbsp; | &nbsp; Smart &nbsp; | &nbsp; For a Better Tomorrow</span></footer><script>
+document.getElementById('contactForm').addEventListener('submit', async function(event) {
+  event.preventDefault();
+  const form = this, button = form.querySelector('[type="submit"]'), output = document.getElementById('contactResult');
+  button.disabled = true;
+  output.hidden = false; output.textContent = 'Sending your enquiry...';
+  try {
+    const response = await fetch(form.action || location.href, {method:'POST', body:new FormData(form), headers:{'Accept':'application/json'}, credentials:'same-origin'});
+    let data;
+    try { data = await response.json(); } catch (_) { throw new Error('The server returned an unexpected response (HTTP ' + response.status + '). Refresh and try again.'); }
+    output.style.background = response.ok && data.ok ? '#e7f7ec' : '#fff0f0';
+    output.textContent = data.message || 'Submission failed.';
+    if (data.code) output.textContent += ' [' + data.code + ']';
+    if (data.missing_settings) output.textContent += ' Missing: ' + data.missing_settings.join(', ');
+    if (data.errors) Object.entries(data.errors).forEach(([field, errors]) => { output.textContent += ' ' + field + ': ' + errors.map(e => e.message).join(' '); });
+    if (response.ok && data.ok) form.reset();
+  } catch (error) { output.style.background = '#fff0f0'; output.textContent = error.message || 'Unable to send. Please try again.'; }
+  finally { button.disabled = false; }
+});
+</script></body></html>
