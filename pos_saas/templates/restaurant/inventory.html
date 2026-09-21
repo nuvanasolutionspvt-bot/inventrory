@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Ingredient Inventory{% endblock %}
+{% block breadcrumb %}Restaurant / Inventory{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h3 mb-0">Ingredient Inventory</h1>
+  <div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{% url 'product_list' %}">Menu &amp; Recipes</a><a class="btn btn-outline-primary" href="{% url 'ingredient_purchase' %}">Receive Stock</a><a class="btn btn-primary" href="{% url 'ingredient_create' %}">Add Ingredient</a></div>
+</div>
+<p class="text-muted">Add ingredients, receive stock, then open a menu item's Edit page to build its full and half recipes. Stock is consumed when bills are completed.</p>
+<form method="get" class="d-flex flex-wrap gap-2 mb-3"><label class="visually-hidden" for="ingredient-search">Search ingredients</label><input id="ingredient-search" name="q" value="{{ q }}" class="form-control" style="max-width:320px" placeholder="Search ingredients"><button class="btn btn-outline-primary">Search</button><a class="btn btn-outline-warning" href="?low=1">Low Stock</a><a class="btn btn-light" href="{% url 'restaurant_module_page' 'inventory' %}">All</a></form>
+<div class="card shadow-sm mb-4"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+<thead><tr><th>Ingredient</th><th>Stock</th><th>Low-stock threshold</th><th>Cost / unit</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>{% for ingredient in ingredients %}<tr class="{% if ingredient.is_active and ingredient.current_stock <= ingredient.low_stock_threshold %}table-warning{% endif %}">
+<td>{{ ingredient.name }}</td><td><span class="badge {% if ingredient.current_stock <= 0 %}text-bg-danger{% elif ingredient.current_stock <= ingredient.low_stock_threshold %}text-bg-warning{% else %}text-bg-success{% endif %}">{{ ingredient.current_stock }} {{ ingredient.unit }}</span></td><td>{{ ingredient.low_stock_threshold }} {{ ingredient.unit }}</td><td>&#8377;{{ ingredient.cost_per_unit }} / {{ ingredient.unit }}</td><td>{{ ingredient.is_active|yesno:'Active,Inactive' }}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'ingredient_edit' ingredient.pk %}">Edit</a> {% if ingredient.is_active %}<a class="btn btn-sm btn-outline-primary" href="{% url 'ingredient_purchase' %}?ingredient={{ ingredient.pk }}">Receive Stock</a>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="6" class="text-center text-muted py-4">No ingredients found. Add your first ingredient to start.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Recent Stock Purchases</h2></div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Date</th><th>Ingredient</th><th>Quantity</th><th>Cost / unit</th><th>Supplier</th><th>Received by</th></tr></thead><tbody>{% for purchase in purchases %}<tr><td>{{ purchase.purchased_at|date:'d M Y H:i' }}</td><td>{{ purchase.ingredient.name }}</td><td>{{ purchase.quantity }} {{ purchase.ingredient.unit }}</td><td>&#8377;{{ purchase.cost_per_unit }}</td><td>{{ purchase.supplier_name|default:'--' }}</td><td>{{ purchase.created_by|default:'--' }}</td></tr>{% empty %}<tr><td colspan="6" class="text-center text-muted py-4">No stock purchases yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

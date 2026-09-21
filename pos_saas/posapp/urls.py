@@ -1,14 +1,22 @@
 from .contact import contact_us
 from django.views.generic import TemplateView
 from django.urls import path
-from . import views
+from . import views, payment_views
 
 urlpatterns = [
+    path('restaurant/payments/<int:sale_id>/', payment_views.payment_checkout, name='payment_checkout'),
+    path('restaurant/payments/<int:sale_id>/order/', payment_views.razorpay_order, name='razorpay_order'),
+    path('restaurant/payments/<int:sale_id>/verify/', payment_views.razorpay_verify, name='razorpay_verify'),
+    path('restaurant/payments/<int:sale_id>/check/', payment_views.razorpay_check, name='razorpay_check'),
     path('contact-us/', contact_us, name='contact_us'),
     path('restaurant/waiter/notifications/', views.waiter_order_notifications, name='waiter_order_notifications'),
-    path('', views.dashboard, name='dashboard'),
+    path('', TemplateView.as_view(template_name='home.html'), name='home'),
+    path('dashboard/', views.dashboard, name='dashboard'),
     path('register/', views.register, name='register'),
     path('restaurant/catalog/setup/', views.restaurant_catalog_setup, name='restaurant_catalog_setup'),
+    path('restaurant/modules/inventory/ingredients/new/', views.ingredient_edit, name='ingredient_create'),
+    path('restaurant/modules/inventory/ingredients/<int:pk>/edit/', views.ingredient_edit, name='ingredient_edit'),
+    path('restaurant/modules/inventory/purchases/new/', views.ingredient_purchase, name='ingredient_purchase'),
     path('restaurant/modules/<slug:module>/', views.restaurant_module_page, name='restaurant_module_page'),
     path('restaurant/tables/', views.restaurant_tables, name='restaurant_tables'),
     path('restaurant/tables/<int:table_id>/delete/', views.restaurant_table_delete, name='restaurant_table_delete'),

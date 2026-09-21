@@ -136,6 +136,7 @@
                 <div class="invalid-feedback d-block">{{ form.cost_price.errors|striptags }}</div>
               {% endif %}
               <div class="form-text">Used for stock valuation & margin.</div>
+              {% if inventory_access %}<div class="small mt-2">{% for section in recipe_sections %}<div data-recipe-summary="{{ section.portion }}" {% if section.portion == 'half' and not half_recipe_enabled %}hidden{% endif %}>{{ section.portion|title }} recipe: <output>{{ section.cost|floatformat:2|default:'No recipe' }} ({{ section.percentage|floatformat:2|default:'--' }}%)</output></div>{% endfor %}</div>{% endif %}
             </div>
 
             <div class="col-md-2">
@@ -161,6 +162,8 @@
             </div>
           </div>
         </div>
+
+        {% if inventory_access %}{% include 'restaurant/_recipe_builder.html' %}{% endif %}
 
         <!-- Status -->
         <div>

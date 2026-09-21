@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from .forms import (
     ProductForm, SiteSettingForm, SupplierForm, CustomerForm,
+    IngredientForm, IngredientPurchaseForm, RecipeIngredientFormSet,
     PurchaseForm, SaleForm, StockAdjustForm, ProductSetForm,
     UserCreateForm, UserEditForm, RoleForm, RolePermissionForm,
     TenantRegistrationForm, CompanyBusinessCreateForm, CompanyBusinessEditForm,
@@ -36,9 +37,12 @@ from .forms import (
 from .models import (
     Product, ProductBatch, ProductSet, ProductSetItem, SiteSetting, Supplier, Customer, Purchase, PurchaseItem,
     Sale, SaleItem, StockMove, Category, CustomerLedger, TenantMembership,
+    Ingredient, IngredientPurchase, IngredientStockMove, Recipe, RecipeIngredient, SalePaymentOrder,
     SubscriptionPlan, TenantSubscription, SubscriptionPaymentOrder, Tenant, TenantFeature, KitchenOrderTicket, RestaurantTable
 )
-from .tenancy import SESSION_TENANT_KEY, require_active_tenant
+from .payments import checkout_available
+from .tenancy import (SESSION_TENANT_KEY, require_active_tenant,
+                      restaurant_inventory_enabled, can_manage_restaurant_inventory)
 import csv, io, json
 from django.contrib.auth.models import User, Group, Permission
 
@@ -522,6 +526,62 @@ def _create_sale_line_and_stock(sale, line, sign):
             change=stock_sign * qty,
             reason=reason,
             ref=ref
+        )
+
+
+def apply_ingredient_deductions(sale):
+    """Rebuild ingredient consumption inside the caller's existing atomic block."""
+    sale = Sale.objects.select_for_update().get(pk=sale.pk, tenant=sale.tenant)
+    if not restaurant_inventory_enabled(sale.tenant):
+        return
+    old_moves = list(IngredientStockMove.objects.select_for_update().filter(
+        tenant=sale.tenant, sale=sale,
+    ).order_by('pk'))
+    ingredient_ids = {move.ingredient_id for move in old_moves}
+    requirements = []
+    # Existing returns use Sale.is_return and signed negative SaleItem quantities.
+    if not sale.is_return:
+        for it in sale.saleitem_set.filter(qty__gt=0).order_by('pk'):
+            portion = 'half' if (it.details or '').strip().lower() == 'half' else 'full'
+            recipe = Recipe.objects.filter(
+                tenant=sale.tenant, product_id=it.product_id, portion=portion,
+            ).first()
+            if recipe is None:
+                logger.warning(
+                    'No ingredient recipe: tenant=%s sale=%s product=%s portion=%s',
+                    sale.tenant_id, sale.pk, it.product_id, portion,
+                )
+                continue
+            for component in recipe.ingredients.filter(tenant=sale.tenant).order_by('ingredient_id'):
+                ingredient_ids.add(component.ingredient_id)
+                requirements.append((component.ingredient_id, component.quantity_required * it.qty))
+
+    # Lock the union of old and new ingredients in a stable order before any writes.
+    ingredients = {
+        ingredient.pk: ingredient
+        for ingredient in Ingredient.objects.select_for_update().filter(
+            tenant=sale.tenant, pk__in=ingredient_ids,
+        ).order_by('pk')
+    }
+    for move in old_moves:
+        ingredient = ingredients[move.ingredient_id]
+        ingredient.current_stock += move.quantity_deducted
+        ingredient.save(update_fields=['current_stock', 'updated_at'])
+        move.delete()
+
+    for ingredient_id, required in requirements:
+        ingredient = ingredients[ingredient_id]
+        removed = min(required, ingredient.current_stock)
+        if required > ingredient.current_stock:
+            logger.warning(
+                'Ingredient stock clamped to zero: tenant=%s sale=%s ingredient=%s required=%s available=%s',
+                sale.tenant_id, sale.pk, ingredient_id, required, ingredient.current_stock,
+            )
+        ingredient.current_stock = max(Decimal('0.00'), ingredient.current_stock - required)
+        ingredient.save(update_fields=['current_stock', 'updated_at'])
+        IngredientStockMove.objects.create(
+            tenant=sale.tenant, sale=sale, ingredient=ingredient,
+            quantity_deducted=removed,
         )
 
 
@@ -1013,7 +1073,12 @@ def dashboard(request):
                 tenant=tenant, order_status=Sale.ORDER_STATUS_OPEN, is_return=False,
             ).select_related('restaurant_table', 'waiter', 'customer').order_by('-date', '-id')
             open_orders_page = Paginator(open_orders, page_size).get_page(request.GET.get('page'))
+        inventory_access = can_manage_restaurant_inventory(request.user, tenant)
+        low_ingredients = Ingredient.objects.filter(tenant=tenant, is_active=True, current_stock__lte=F('low_stock_threshold')) if inventory_access else Ingredient.objects.none()
         return render(request, 'restaurant/dashboard.html', {
+            'inventory_access': inventory_access,
+            'low_ingredient_count': low_ingredients.count(),
+            'low_ingredients': low_ingredients.order_by('current_stock', 'name')[:10],
             'is_cashier': is_cashier,
             'open_orders_page': open_orders_page,
             'page_size': page_size,
@@ -1237,18 +1302,62 @@ def product_create(request):
 
 
 @login_required
+@transaction.atomic
 def product_update(request, pk):
     tenant = _tenant(request)
-    product = get_object_or_404(Product, tenant=tenant, pk=pk)
+    if tenant.business_type == 'restaurant' and not request.user.has_perm('posapp.change_product'):
+        raise PermissionDenied('Menu edit permission is required.')
+    product = get_object_or_404(Product.objects.select_for_update(), tenant=tenant, pk=pk)
+    form = ProductForm(request.POST or None, request.FILES or None, instance=product, tenant=tenant)
+    inventory_access = can_manage_restaurant_inventory(request.user, tenant)
+    recipe_sections = []
+    recipe_posted = request.method == 'POST' and 'full-TOTAL_FORMS' in request.POST
+    half_enabled = bool(request.POST.get('half_price')) if request.method == 'POST' else product.half_price is not None
+    if inventory_access:
+        for portion in ('full', 'half'):
+            recipe = Recipe.objects.filter(tenant=tenant, product=product, portion=portion).first()
+            rows = RecipeIngredient.objects.filter(tenant=tenant, recipe=recipe) if recipe else RecipeIngredient.objects.none()
+            formset = RecipeIngredientFormSet(
+                request.POST if recipe_posted and (portion == 'full' or half_enabled) else None,
+                queryset=rows, prefix=portion, form_kwargs={'tenant': tenant},
+            )
+            recipe_sections.append({'portion': portion, 'formset': formset,
+                'cost': product.get_recipe_food_cost(portion),
+                'percentage': product.get_recipe_food_cost_percentage(portion)})
     if request.method == 'POST':
-        form = ProductForm(request.POST, request.FILES, instance=product, tenant=tenant)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Product updated.')
-            return redirect('product_list')
-    else:
-        form = ProductForm(instance=product, tenant=tenant)
-    return render(request, 'products/form.html', {'form': form, 'title': 'Edit Product', 'show_barcode': 'barcode' in form.fields})
+        valid = form.is_valid()
+        if inventory_access and recipe_posted:
+            for section in recipe_sections:
+                if section['portion'] == 'full' or half_enabled:
+                    valid = section['formset'].is_valid() and valid
+        if valid:
+            product = form.save()
+            if inventory_access and recipe_posted:
+                for section in recipe_sections:
+                    if section['portion'] == 'half' and not half_enabled:
+                        continue
+                    rows = [f.cleaned_data for f in section['formset'].forms
+                            if f.cleaned_data and not f.cleaned_data.get('DELETE')]
+                    recipe = Recipe.objects.filter(tenant=tenant, product=product, portion=section['portion']).first()
+                    if not rows:
+                        if recipe:
+                            recipe.delete()
+                        continue
+                    if recipe is None:
+                        recipe = Recipe.objects.create(tenant=tenant, product=product, portion=section['portion'])
+                    recipe.ingredients.all().delete()
+                    for row in rows:
+                        RecipeIngredient.objects.create(tenant=tenant, recipe=recipe,
+                            ingredient=row['ingredient'], quantity_required=row['quantity_required'])
+            messages.success(request, 'Product and recipes updated.' if inventory_access else 'Product updated.')
+            return redirect('product_update', pk=product.pk) if inventory_access else redirect('product_list')
+    return render(request, 'products/form.html', {
+        'form': form, 'title': 'Edit Product', 'show_barcode': 'barcode' in form.fields,
+        'inventory_access': inventory_access, 'recipe_sections': recipe_sections,
+        'half_recipe_enabled': half_enabled,
+        'ingredient_costs': {str(i.pk): {'cost': str(i.cost_per_unit), 'unit': i.unit}
+            for i in Ingredient.objects.filter(tenant=tenant)} if inventory_access else {},
+    })
 
 
 @login_required
@@ -1968,6 +2077,8 @@ def pos_sale_create(request):
     if request.method == 'POST':
         form = assign_order_defaults(SaleForm(request.POST, tenant=tenant))
         sale_action = request.POST.get('sale_action') or 'complete'
+        if sale_action == 'razorpay' and not checkout_available(tenant):
+            raise PermissionDenied('Verified Razorpay configuration is required.')
         if is_restaurant and sale_action == 'generate_kot' and not _tenant_kot_enabled(tenant):
             raise PermissionDenied('KOT Management is not enabled for this business.')
         if is_waiter and sale_action != 'generate_kot':
@@ -2076,7 +2187,7 @@ def pos_sale_create(request):
             sale.tax *= sign
             sale.total *= sign
             sale.created_by = request.user
-            if is_restaurant and sale_action == 'generate_kot':
+            if is_restaurant and sale_action in ('generate_kot', 'razorpay'):
                 sale.order_status = Sale.ORDER_STATUS_OPEN
                 sale.paid_amount = Decimal('0.00')
             else:
@@ -2087,10 +2198,16 @@ def pos_sale_create(request):
             for line in lines:
                 _create_sale_line_and_stock(sale, line, sign)
 
+            if is_restaurant and sale.order_status == Sale.ORDER_STATUS_PAID:
+                apply_ingredient_deductions(sale)
+
             kot = _create_kot_for_sale(sale)
             if is_restaurant and sale.restaurant_table:
                 table_status = RestaurantTable.STATUS_OCCUPIED if sale.order_status == Sale.ORDER_STATUS_OPEN else RestaurantTable.STATUS_AVAILABLE
                 _set_restaurant_table_status(sale.restaurant_table, table_status)
+
+            if is_restaurant and sale_action == 'razorpay':
+                return redirect('payment_checkout', sale_id=sale.pk)
 
             if is_restaurant and sale_action == 'generate_kot':
                 messages.success(request, f'{kot.ticket_no if kot else "KOT"} generated and sent to kitchen.')
@@ -2163,9 +2280,13 @@ def invoice_view(request, sale_id):
     tenant = _tenant(request)
     sale = get_object_or_404(Sale.objects.select_related('customer'), tenant=tenant, pk=sale_id)
     items = SaleItem.objects.filter(sale=sale).select_related('product', 'product_set')
+    razorpay_payment = SalePaymentOrder.objects.filter(tenant=tenant, sale=sale, status='paid').first()
     s = SiteSetting.get(tenant)
     return render(request, 'sales/invoice.html', {
         "sale": sale, "items": items,
+        "razorpay_payment": razorpay_payment,
+        "auto_print": bool(request.GET.get('print') == '1' and razorpay_payment
+                           and sale.order_status == Sale.ORDER_STATUS_PAID),
         "org_name": s.org_name, "org_address": s.org_address,
         "org_phone": s.org_phone, "org_email": s.org_email,
         "bill_title": s.bill_title, "bill_footer": s.bill_footer,
@@ -2706,7 +2827,10 @@ def sales_list(request):
 @transaction.atomic
 def sale_update(request, sale_id):
     tenant = _tenant(request)
-    sale = get_object_or_404(Sale, tenant=tenant, pk=sale_id)
+    sale = get_object_or_404(Sale.objects.select_for_update(), tenant=tenant, pk=sale_id)
+    if SalePaymentOrder.objects.filter(tenant=tenant, sale=sale).exists():
+        messages.info(request, 'This bill has an online payment order. Continue or check its payment status before making changes.')
+        return redirect('payment_checkout', sale_id=sale.pk)
     products, product_sets, product_batches = _pos_catalog(tenant)
     is_pharmacy = tenant.business_type == 'pharmacy'
     is_restaurant = tenant.business_type == 'restaurant'
@@ -2746,6 +2870,8 @@ def sale_update(request, sale_id):
             sale = form.save(commit=False)
             sale.tenant = tenant
             sale_action = request.POST.get('sale_action') or 'complete'
+            if sale_action == 'razorpay' and (not is_restaurant or not checkout_available(tenant) or sale.order_status != Sale.ORDER_STATUS_OPEN):
+                raise PermissionDenied('Razorpay requires a configured restaurant and an open bill.')
             if is_waiter and sale_action != 'generate_kot':
                 raise PermissionDenied('Waiter can generate KOT but cannot complete billing.')
 
@@ -2796,7 +2922,7 @@ def sale_update(request, sale_id):
             sale.subtotal *= sign
             sale.tax *= sign
             sale.total *= sign
-            if is_restaurant and sale_action == 'generate_kot':
+            if is_restaurant and sale_action in ('generate_kot', 'razorpay'):
                 sale.order_status = Sale.ORDER_STATUS_OPEN
                 sale.paid_amount = Decimal('0.00')
             else:
@@ -2806,6 +2932,9 @@ def sale_update(request, sale_id):
             for line in lines:
                 _create_sale_line_and_stock(sale, line, sign)
 
+            if is_restaurant and sale.order_status == Sale.ORDER_STATUS_PAID:
+                apply_ingredient_deductions(sale)
+
             if is_restaurant:
                 kot = _create_kot_for_sale(sale)
                 if previous_table and previous_table != sale.restaurant_table:
@@ -2813,6 +2942,8 @@ def sale_update(request, sale_id):
                 if sale.restaurant_table:
                     table_status = RestaurantTable.STATUS_OCCUPIED if sale.order_status == Sale.ORDER_STATUS_OPEN else RestaurantTable.STATUS_AVAILABLE
                     _set_restaurant_table_status(sale.restaurant_table, table_status)
+                if sale_action == 'razorpay':
+                    return redirect('payment_checkout', sale_id=sale.pk)
                 if sale_action == 'generate_kot':
                     messages.success(request, f'{kot.ticket_no if kot else "KOT"} updated and sent to kitchen.')
                     return _restaurant_order_redirect(request, tenant)
@@ -2890,6 +3021,11 @@ def restaurant_module_page(request, module):
     )
     if not getattr(features, field, False):
         raise PermissionDenied('This module is not enabled for this tenant.')
+    if module == 'online-payment':
+        from .payment_views import payment_module
+        return payment_module(request)
+    if module == 'inventory':
+        return restaurant_inventory_list(request)
     return render(request, 'restaurant/module.html', {'title': title, 'icon': icon})
 
 # --------------------------
@@ -3660,3 +3796,60 @@ def waiter_order_notifications(request):
     } for kot in orders]})
     response['Cache-Control'] = 'no-store'
     return response
+
+
+# Ingredient management uses the existing restaurant inventory module entry point.
+def _inventory_tenant(request):
+    tenant = _tenant(request)
+    if not can_manage_restaurant_inventory(request.user, tenant):
+        raise PermissionDenied('Enabled restaurant inventory and menu edit permission are required.')
+    return tenant
+
+
+def restaurant_inventory_list(request):
+    tenant = _inventory_tenant(request)
+    ingredients = Ingredient.objects.filter(tenant=tenant)
+    query = request.GET.get('q', '').strip()
+    if query:
+        ingredients = ingredients.filter(name__icontains=query)
+    if request.GET.get('low') == '1':
+        ingredients = ingredients.filter(is_active=True, current_stock__lte=F('low_stock_threshold'))
+    return render(request, 'restaurant/inventory.html', {
+        'ingredients': ingredients.order_by('name'), 'q': query,
+        'purchases': IngredientPurchase.objects.filter(tenant=tenant).select_related('ingredient', 'created_by')[:20],
+    })
+
+
+@login_required
+@transaction.atomic
+def ingredient_edit(request, pk=None):
+    tenant = _inventory_tenant(request)
+    ingredient = get_object_or_404(Ingredient.objects.select_for_update(), tenant=tenant, pk=pk) if pk else None
+    form = IngredientForm(request.POST or None, instance=ingredient, tenant=tenant)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Ingredient saved.')
+        return redirect('restaurant_module_page', module='inventory')
+    return render(request, 'restaurant/inventory_form.html', {
+        'form': form, 'title': 'Edit Ingredient' if pk else 'Add Ingredient',
+    })
+
+
+@login_required
+@transaction.atomic
+def ingredient_purchase(request):
+    tenant = _inventory_tenant(request)
+    form = IngredientPurchaseForm(request.POST or None, tenant=tenant,
+        initial={'ingredient': request.GET.get('ingredient')})
+    if request.method == 'POST' and form.is_valid():
+        purchase = form.save(commit=False)
+        purchase.created_by = request.user
+        try:
+            # Purchase.save locks the ingredient and posts receipt + stock atomically.
+            purchase.save()
+        except ValidationError as exc:
+            form.add_error(None, "; ".join(_validation_messages(exc)))
+        else:
+            messages.success(request, 'Stock received and ingredient cost updated.')
+            return redirect('restaurant_module_page', module='inventory')
+    return render(request, 'restaurant/inventory_form.html', {'form': form, 'title': 'Receive Ingredient Stock'})

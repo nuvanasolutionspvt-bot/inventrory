@@ -132,7 +132,9 @@ else:
 # WhiteNoise configuration
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 WHITENOISE_USE_FINDERS = DEBUG  # Use finders in debug mode
-WHITENOISE_AUTOREFRESH = DEBUG
+# runserver can run with DEBUG=False locally. Refresh static-file metadata after
+# collectstatic so cached Content-Length does not truncate changed JavaScript.
+WHITENOISE_AUTOREFRESH = DEBUG or 'runserver' in sys.argv
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -140,7 +142,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGIN_URL = '/login/'
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/login/'
 
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '')
@@ -183,3 +185,6 @@ LOGGING = {
 # Contact form -> Google Apps Script web app (keep the token server-side).
 CONTACT_APPS_SCRIPT_URL = os.environ.get('CONTACT_APPS_SCRIPT_URL', 'https://script.google.com/macros/s/AKfycbzJqguFM_CBJBripeDBY68beh__mdIVAOzPhA6j6ZsicQUKJbbETsAwQQKvGI-xLCKE/exec')
 CONTACT_APPS_SCRIPT_TOKEN = os.environ.get('CONTACT_APPS_SCRIPT_TOKEN', '')
+
+# Separate encryption key for tenant payment credentials; preserve securely across deployments.
+PAYMENT_CREDENTIAL_KEY = os.environ.get("PAYMENT_CREDENTIAL_KEY", "")

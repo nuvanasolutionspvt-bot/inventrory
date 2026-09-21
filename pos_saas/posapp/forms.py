@@ -12,6 +12,7 @@ from django.utils.text import slugify
 
 from .models import (
     Product, ProductSet, Category, Supplier, Customer,
+    Ingredient, IngredientPurchase, RecipeIngredient,
     Purchase, Sale, SiteSetting, Tenant, TenantMembership,
     SubscriptionPlan, TenantSubscription, TenantFeature, RestaurantTable
 )
@@ -988,7 +989,7 @@ class SaleForm(TenantModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if (self.is_bound and self.data.get('sale_action') == 'generate_kot'
+        if (self.is_bound and self.data.get('sale_action') in ('generate_kot', 'razorpay')
                 and getattr(self.tenant, 'business_type', None) == 'restaurant'):
             # Kitchen orders do not collect payment or create returns.
             for name, value in [('payment_method', 'cash'), ('paid_amount', Decimal('0.00')), ('is_return', False)]:
@@ -1213,3 +1214,105 @@ class CustomerStatementFilterForm(forms.Form):
 
 
 
+
+
+class IngredientForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Ingredient
+        fields = ['name', 'unit', 'current_stock', 'low_stock_threshold', 'cost_per_unit', 'is_active']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.tenant = self.tenant
+        self.fields['current_stock'].label = 'Opening stock'
+        if self.instance.pk:
+            self.fields.pop('current_stock')
+            if (self.instance.current_stock or self.instance.purchases.exists()
+                    or self.instance.recipe_ingredients.exists() or self.instance.stock_moves.exists()):
+                self.fields['unit'].disabled = True
+                self.fields['unit'].help_text = 'Unit cannot change after stock or recipes use this ingredient.'
+        for field in self.fields.values():
+            field.widget.attrs['class'] = ('form-check-input' if isinstance(field.widget, forms.CheckboxInput)
+                else 'form-select' if isinstance(field.widget, forms.Select) else 'form-control')
+
+    def clean_name(self):
+        name = self.cleaned_data['name'].strip()
+        if self.tenant_unique_exists(Ingredient, 'name', name):
+            raise ValidationError('An ingredient with this name already exists.')
+        return name
+
+
+class IngredientPurchaseForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = IngredientPurchase
+        fields = ['ingredient', 'quantity', 'cost_per_unit', 'supplier_name']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.tenant = self.tenant
+        self.fields['ingredient'].queryset = Ingredient.objects.filter(tenant=self.tenant, is_active=True)
+        self.fields['quantity'].help_text = 'Enter quantity in the selected ingredient unit.'
+        self.fields['cost_per_unit'].help_text = 'Cost of one ingredient unit; this updates recipe costing.'
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
+
+
+class RecipeIngredientForm(TenantModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = RecipeIngredient
+        fields = ['ingredient', 'quantity_required']
+        widgets = {
+            'ingredient': forms.Select(attrs={'class': 'form-select'}),
+            'quantity_required': forms.NumberInput(attrs={'class': 'form-control', 'min': '0.01', 'step': '0.01'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.tenant = self.tenant
+        self.fields['ingredient'].queryset = Ingredient.objects.filter(tenant=self.tenant).order_by('name')
+
+
+class BaseRecipeIngredientFormSet(forms.BaseModelFormSet):
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        seen = set()
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            ingredient = form.cleaned_data.get('ingredient')
+            if ingredient is not None:
+                if ingredient.pk in seen:
+                    raise ValidationError('Use each ingredient only once per portion.')
+                seen.add(ingredient.pk)
+
+
+RecipeIngredientFormSet = forms.modelformset_factory(
+    RecipeIngredient, form=RecipeIngredientForm, formset=BaseRecipeIngredientFormSet,
+    extra=0, can_delete=True, max_num=100, validate_max=True,
+)
+
+
+class RazorpaySettingsForm(forms.Form):
+    key_id = forms.RegexField(regex=r'^rzp_(test|live)_[A-Za-z0-9]{8,64}$', max_length=80,
+        label='Razorpay Key ID', widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off'}),
+        error_messages={'invalid': 'Enter a valid rzp_test_ or rzp_live_ Key ID.'})
+    key_secret = forms.CharField(required=False, min_length=8, max_length=256, strip=False,
+        label='Razorpay Key Secret', widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+        help_text='Leave blank to keep your saved secret. Enter a new secret when changing the Key ID.')
+    enabled = forms.BooleanField(required=False, label='Enable Razorpay checkout',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}))
+
+    def __init__(self, *args, gateway=None, **kwargs):
+        self.gateway = gateway
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        data = super().clean()
+        secret = data.get('key_secret', '')
+        if secret and (not secret.isascii() or any(c.isspace() or ord(c) < 33 for c in secret)):
+            self.add_error('key_secret', 'The secret must not contain spaces or control characters.')
+        if not secret and (not self.gateway or data.get('key_id') != self.gateway.key_id):
+            self.add_error('key_secret', 'Enter the secret for this Key ID.')
+        return data

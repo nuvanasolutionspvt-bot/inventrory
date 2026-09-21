@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Pay Bill INV-{{ sale.pk }}{% endblock %}
+{% block breadcrumb %}Restaurant / Payment{% endblock %}
+{% block content %}<div class="row justify-content-center"><div class="col-lg-6"><div class="card shadow-sm"><div class="card-body p-4">
+<h1 class="h4">Bill INV-{{ sale.pk }}</h1><p class="fs-3">&#8377;{{ sale.total }}</p>
+{% if gateway.mode == 'Test' %}<div class="alert alert-warning">Test mode: no real money is collected.</div>{% elif gateway %}<div class="alert alert-info">Live mode: this checkout uses real payments.</div>{% endif %}
+<p>The bill remains open until Razorpay confirms payment. If checkout closes or the connection drops, use Check payment status before retrying.</p>
+<form id="razorpay-token">{% csrf_token %}</form><div id="payment-message" class="alert alert-info" role="status" hidden></div>
+<div class="d-flex flex-wrap gap-2"><button type="button" id="razorpay-pay" class="btn btn-primary" {% if not razorpay_available %}disabled{% endif %}>Pay with Razorpay</button><button type="button" id="razorpay-check" class="btn btn-outline-primary">Check payment status</button><a class="btn btn-light" href="{% url 'dashboard' %}">Dashboard</a></div>
+</div></div></div></div>
+{{ payment_urls|json_script:'razorpay-urls' }}
+<script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
+<script src="{% static 'restaurant/razorpay.js' %}?v=20260921-refresh" defer></script>
+{% endblock %}

@@ -17,7 +17,7 @@
   <body class="app-body">
     <nav class="navbar navbar-expand-lg app-navbar shadow-sm">
       <div class="container-fluid app-shell">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'home' %}{% endif %}">
           <img src="{% static 'brand/nuvana-logo.png' %}" alt="Nuvana Solutions">
           <span class="fw-semibold d-none d-sm-inline"> </span>
         </a>
@@ -76,16 +76,16 @@
               {% if tenant_features.kitchen_display and perms.posapp.can_view_kds %}
                 <li class="nav-item"><a class="nav-link" href="{% url 'kitchen_display' %}"><i class="bi bi-display me-1"></i>Kitchen Display</a></li>
               {% endif %}
-              {% if tenant_features.online_payment and perms.posapp.can_manage_settings or tenant_features.inventory and perms.posapp.can_adjust_stock %}
+              {% if tenant_features.online_payment and perms.posapp.can_pos or restaurant_inventory_access %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                     <i class="bi bi-grid-3x3-gap me-1"></i>Restaurant
                   </a>
                   <ul class="dropdown-menu shadow-sm">
-                    {% if tenant_features.online_payment and perms.posapp.can_manage_settings %}
+                    {% if tenant_features.online_payment and perms.posapp.can_pos %}
                       <li><a class="dropdown-item" href="{% url 'restaurant_module_page' 'online-payment' %}"><i class="bi bi-credit-card-2-front me-2"></i>Online Payment</a></li>
                     {% endif %}
-                    {% if tenant_features.inventory and perms.posapp.can_adjust_stock %}
+                    {% if restaurant_inventory_access %}
                       <li><a class="dropdown-item" href="{% url 'restaurant_module_page' 'inventory' %}"><i class="bi bi-boxes me-2"></i>Inventory</a></li>
                     {% endif %}
                   </ul>

@@ -11,6 +11,9 @@
   </div>
 </div>
 
+{% if razorpay_payment %}<div class="alert alert-success d-print-none">Payment verified via Razorpay. Transaction: {{ razorpay_payment.payment_id }}</div>{% endif %}
+{% if auto_print %}<script src="{% static 'restaurant/invoice-print.js' %}?v=1" defer></script>{% endif %}
+
 <!-- INVOICE TABLE -->
 <div class="invoice-wrapper invoice-{{ printer_type|default:'a4' }}">
   

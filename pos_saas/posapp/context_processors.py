@@ -1,4 +1,6 @@
 from .models import TenantFeature
+from .payments import checkout_available
+from .tenancy import can_manage_restaurant_inventory
 
 
 def kitchen_notifications_admin(user, tenant):
@@ -28,4 +30,6 @@ def tenant_features(request):
         and user.has_perm('posapp.can_pos')
         and (kitchen_notifications_admin(user, tenant) or user.groups.filter(name='Waiter').exists())
     )
-    return {'tenant_features': features, 'waiter_notifications': waiter_notifications}
+    return {'tenant_features': features, 'waiter_notifications': waiter_notifications,
+            'restaurant_inventory_access': can_manage_restaurant_inventory(user, tenant),
+            'razorpay_available': checkout_available(tenant)}

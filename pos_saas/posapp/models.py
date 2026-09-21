@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth import get_user_model
 from django.conf import settings as dj_settings
 from django.core.exceptions import ValidationError
@@ -261,6 +261,23 @@ class Product(TimeStampedModel):
 
     def __str__(self):
         return f"{self.code} - {self.name}"
+
+    def get_recipe_food_cost(self, portion="full"):
+        if not self.pk or portion not in ('full', 'half'):
+            return None
+        recipe = self.recipes.filter(tenant_id=self.tenant_id, portion=portion).first()
+        if recipe is None:
+            return None
+        return sum((row.quantity_required * row.ingredient.cost_per_unit
+                    for row in recipe.ingredients.filter(tenant_id=self.tenant_id,
+                        ingredient__tenant_id=self.tenant_id).select_related('ingredient')), Decimal('0.00'))
+
+    def get_recipe_food_cost_percentage(self, portion="full"):
+        cost = self.get_recipe_food_cost(portion)
+        price = self.half_price if portion == 'half' else self.unit_price
+        if cost is None or price is None or price <= 0:
+            return None
+        return cost / price * Decimal('100')
 
     @property
     def stock(self):
@@ -670,6 +687,118 @@ class StockMove(TimeStampedModel):
         return f"{self.product} {self.change} ({self.reason})"
 
 
+# Restaurant ingredient inventory (independent of finished-product StockMove).
+class Ingredient(TimeStampedModel):
+    UNIT_CHOICES = [('kg', 'kg'), ('g', 'g'), ('l', 'l'), ('ml', 'ml'), ('pc', 'pc')]
+    tenant = models.ForeignKey(Tenant, related_name='ingredients', on_delete=models.CASCADE)
+    name = models.CharField(max_length=200)
+    unit = models.CharField(max_length=2, choices=UNIT_CHOICES)
+    current_stock = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(Decimal('0.00'))])
+    low_stock_threshold = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(Decimal('0.00'))])
+    cost_per_unit = models.DecimalField(max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(Decimal('0.00'))])
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [models.UniqueConstraint(fields=['tenant', 'name'], name='uniq_tenant_ingredient_name')]
+
+    def __str__(self):
+        return f'{self.name} ({self.unit})'
+
+
+class IngredientPurchase(models.Model):
+    tenant = models.ForeignKey(Tenant, related_name='ingredient_purchases', on_delete=models.CASCADE)
+    ingredient = models.ForeignKey(Ingredient, related_name='purchases', on_delete=models.PROTECT)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    cost_per_unit = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    supplier_name = models.CharField(max_length=150, blank=True)
+    purchased_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        ordering = ['-purchased_at', '-id']
+
+    def clean(self):
+        super().clean()
+        if self.ingredient_id and self.tenant_id and self.ingredient.tenant_id != self.tenant_id:
+            raise ValidationError({'ingredient': 'Ingredient must belong to the same business.'})
+
+    def save(self, *args, **kwargs):
+        using = kwargs.get('using') or self._state.db or 'default'
+        with transaction.atomic(using=using):
+            if not self._state.adding:
+                previous = type(self).objects.using(using).select_for_update().get(pk=self.pk)
+                fields = ('tenant_id', 'ingredient_id', 'quantity', 'cost_per_unit')
+                if any(getattr(previous, field) != getattr(self, field) for field in fields):
+                    raise ValidationError('Posted purchase business, ingredient, quantity and cost cannot be edited.')
+                self.full_clean()
+                return super().save(*args, **kwargs)
+            ingredient = Ingredient.objects.using(using).select_for_update().get(pk=self.ingredient_id)
+            self.ingredient = ingredient
+            self.full_clean()
+            super().save(*args, **kwargs)
+            ingredient.current_stock += self.quantity
+            ingredient.cost_per_unit = self.cost_per_unit
+            ingredient.full_clean()
+            ingredient.save(using=using, update_fields=['current_stock', 'cost_per_unit', 'updated_at'])
+
+
+class Recipe(models.Model):
+    PORTION_CHOICES = [('full', 'Full'), ('half', 'Half')]
+    tenant = models.ForeignKey(Tenant, related_name='recipes', on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, related_name='recipes', on_delete=models.CASCADE)
+    portion = models.CharField(max_length=4, choices=PORTION_CHOICES, default='full')
+
+    class Meta:
+        unique_together = [('product', 'portion')]
+
+    def clean(self):
+        super().clean()
+        if self.product_id and self.tenant_id and self.product.tenant_id != self.tenant_id:
+            raise ValidationError({'product': 'Product must belong to the same business.'})
+
+
+class RecipeIngredient(models.Model):
+    tenant = models.ForeignKey(Tenant, related_name='recipe_ingredients', on_delete=models.CASCADE)
+    recipe = models.ForeignKey(Recipe, related_name='ingredients', on_delete=models.CASCADE)
+    ingredient = models.ForeignKey(Ingredient, related_name='recipe_ingredients', on_delete=models.PROTECT)
+    quantity_required = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+
+    class Meta:
+        unique_together = [('recipe', 'ingredient')]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.recipe_id and self.tenant_id and self.recipe.tenant_id != self.tenant_id:
+            errors['recipe'] = 'Recipe must belong to the same business.'
+        if self.ingredient_id and self.tenant_id and self.ingredient.tenant_id != self.tenant_id:
+            errors['ingredient'] = 'Ingredient must belong to the same business.'
+        if errors:
+            raise ValidationError(errors)
+
+
+class IngredientStockMove(models.Model):
+    tenant = models.ForeignKey(Tenant, related_name='ingredient_stock_moves', on_delete=models.CASCADE)
+    sale = models.ForeignKey(Sale, related_name='ingredient_stock_moves', on_delete=models.CASCADE)
+    ingredient = models.ForeignKey(Ingredient, related_name='stock_moves', on_delete=models.PROTECT)
+    quantity_deducted = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], help_text='Actual quantity removed after clamping; restore exactly this amount on reversal.')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.sale_id and self.tenant_id and self.sale.tenant_id != self.tenant_id:
+            errors['sale'] = 'Sale must belong to the same business.'
+        if self.ingredient_id and self.tenant_id and self.ingredient.tenant_id != self.tenant_id:
+            errors['ingredient'] = 'Ingredient must belong to the same business.'
+        if errors:
+            raise ValidationError(errors)
+
+
 # -------------------------------------------------------------------
 # App-level permissions anchor (no DB table)
 # -------------------------------------------------------------------
@@ -820,3 +949,36 @@ def ensure_settings_singleton(sender, **kwargs):
 
 
 
+
+
+class TenantPaymentGateway(TimeStampedModel):
+    tenant = models.OneToOneField(Tenant, related_name='payment_gateway', on_delete=models.CASCADE)
+    key_id = models.CharField(max_length=80)
+    encrypted_secret = models.TextField(editable=False)
+    enabled = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def mode(self):
+        return 'Live' if self.key_id.startswith('rzp_live_') else 'Test'
+
+
+class SalePaymentOrder(TimeStampedModel):
+    tenant = models.ForeignKey(Tenant, related_name='sale_payment_orders', on_delete=models.CASCADE)
+    sale = models.ForeignKey(Sale, related_name='payment_orders', on_delete=models.PROTECT)
+    gateway_order_id = models.CharField(max_length=100, unique=True)
+    key_id = models.CharField(max_length=80)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    status = models.CharField(max_length=12, choices=[('created', 'Pending'), ('paid', 'Paid')], default='created')
+    payment_id = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        indexes = [models.Index(fields=['tenant', 'status'])]
+
+    def clean(self):
+        if self.sale_id and self.tenant_id and self.sale.tenant_id != self.tenant_id:
+            raise ValidationError({'sale': 'Bill must belong to the same business.'})

@@ -12,7 +12,7 @@
 6. Deploy this code and restart the Django application service so it loads the environment variables.
 7. Submit the Contact Us form. A new Contact Enquiries tab will be created in the specified sheet; existing tabs are not modified. Success is displayed only after Apps Script acknowledges saving.
 
-This app reads process environment variables; simply uploading a .env file is not sufficient unless your service loads it. Never put the token into the template or commit it to GitHub.
+Django loads pos_saas/.env automatically using python-dotenv. Install requirements after pulling updates. Existing service environment variables take precedence; remove old CONTACT_APPS_SCRIPT_* Environment entries from the systemd override when switching to .env. Restart inventory.service after changing .env. Never put the token into the template or commit it to GitHub.
 
 If access is restricted by your Google Workspace administrator, Anyone may be unavailable; ask the administrator to allow this deployment method.
 

@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Online Payments{% endblock %}
+{% block breadcrumb %}Restaurant / Online Payments{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Razorpay Payments</h1>
+<div class="alert {% if gateway.enabled %}alert-success{% else %}alert-warning{% endif %}">{% if gateway %}{{ gateway.mode }} mode &middot; {% if gateway.enabled %}Checkout enabled{% else %}Checkout disabled{% endif %}. Credentials last verified: {{ gateway.verified_at }}.{% else %}Connect your restaurant's Razorpay account to receive bill payments.{% endif %}</div>
+{% if form %}<form method="post" class="card shadow-sm mb-4" autocomplete="off">{% csrf_token %}<div class="card-header bg-white"><h2 class="h5 mb-0">Merchant Account</h2></div><div class="card-body">
+<p>Create your Razorpay account, complete its activation, and generate API keys in the Razorpay dashboard. Use a matching Test or Live key pair. Payments go to this merchant account.</p>
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="row g-3">{% for field in form %}<div class="col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}<div class="text-danger small">{{ field.errors }}</div></div>{% endfor %}</div>
+<p class="small text-muted mt-3 mb-0">The secret is encrypted and never displayed again. Resolve pending gateway orders before replacing keys. Test payments do not transfer real money.</p>
+</div><div class="card-footer bg-white"><button class="btn btn-primary">Validate &amp; Save</button></div></form>{% endif %}
+<div class="card shadow-sm mb-4"><div class="card-header bg-white"><h2 class="h5 mb-0">Open Bills</h2></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Bill</th><th>Date</th><th>Amount</th><th></th></tr></thead><tbody>{% for bill in open_bills %}<tr><td>INV-{{ bill.pk }}</td><td>{{ bill.date }}</td><td>&#8377;{{ bill.total }}</td><td><a class="btn btn-sm btn-primary" href="{% url 'payment_checkout' bill.pk %}">Collect / Check Payment</a></td></tr>{% empty %}<tr><td colspan="4" class="text-muted p-3">No unpaid open bills. Select Pay with Razorpay in the POS to start.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Recent Gateway Orders</h2></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Bill</th><th>Gateway Order</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>{% for order in payment_orders %}<tr><td>INV-{{ order.sale_id }}</td><td>{{ order.gateway_order_id }}</td><td>&#8377;{{ order.amount }}</td><td>{{ order.get_status_display }}</td><td><a href="{% url 'payment_checkout' order.sale_id %}">{% if order.status == 'paid' %}Invoice{% else %}Check payment status{% endif %}</a></td></tr>{% empty %}<tr><td colspan="5" class="text-muted p-3">No payments yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

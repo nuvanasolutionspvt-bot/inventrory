@@ -1,6 +1,6 @@
 from django.core.exceptions import PermissionDenied
 
-from .models import SiteSetting, Tenant, TenantMembership
+from .models import SiteSetting, Tenant, TenantMembership, TenantFeature
 
 
 SESSION_TENANT_KEY = 'active_tenant_id'
@@ -63,3 +63,13 @@ def require_active_tenant(request):
     if tenant is None:
         raise PermissionDenied("No active tenant is assigned to this user.")
     return tenant
+
+
+def restaurant_inventory_enabled(tenant):
+    return bool(tenant and tenant.business_type == 'restaurant'
+                and TenantFeature.objects.filter(tenant=tenant, inventory=True).exists())
+
+
+def can_manage_restaurant_inventory(user, tenant):
+    return bool(user and user.is_authenticated and restaurant_inventory_enabled(tenant)
+                and user.has_perm('posapp.change_product'))

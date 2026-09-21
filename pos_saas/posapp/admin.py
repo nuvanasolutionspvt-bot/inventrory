@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    Ingredient, IngredientPurchase, Recipe, RecipeIngredient, IngredientStockMove, SalePaymentOrder,
     Category, Product, ProductBatch, ProductSet, ProductSetItem, Supplier, Customer, Purchase,
     PurchaseItem, Sale, SaleItem, StockMove, Tenant, TenantMembership, TenantFeature, KitchenOrderTicket, RestaurantTable,
     SiteSetting, CustomerLedger, SubscriptionPlan, TenantSubscription,
@@ -163,3 +164,55 @@ class KitchenOrderTicketAdmin(admin.ModelAdmin):
     list_filter = ['tenant', 'status', 'created_at']
     raw_id_fields = ['tenant', 'sale']
     search_fields = ['ticket_no', 'tenant__name', 'tenant__slug']
+
+
+class IngredientAuditAdmin(admin.ModelAdmin):
+    """Tenant-scoped inspection; stock and recipe writes go through validated app forms."""
+    list_filter = ['tenant']
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(tenant__memberships__user=request.user,
+            tenant__memberships__is_active=True, tenant__is_active=True).distinct()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Ingredient)
+class IngredientAdmin(IngredientAuditAdmin):
+    list_display = ['tenant', 'name', 'unit', 'current_stock', 'low_stock_threshold', 'cost_per_unit', 'is_active']
+    search_fields = ['name', 'tenant__name']
+
+
+@admin.register(IngredientPurchase)
+class IngredientPurchaseAdmin(IngredientAuditAdmin):
+    list_display = ['tenant', 'ingredient', 'quantity', 'cost_per_unit', 'supplier_name', 'purchased_at', 'created_by']
+
+
+@admin.register(Recipe)
+class RecipeAdmin(IngredientAuditAdmin):
+    list_display = ['tenant', 'product', 'portion']
+
+
+@admin.register(RecipeIngredient)
+class RecipeIngredientAdmin(IngredientAuditAdmin):
+    list_display = ['tenant', 'recipe', 'ingredient', 'quantity_required']
+
+
+@admin.register(IngredientStockMove)
+class IngredientStockMoveAdmin(IngredientAuditAdmin):
+    list_display = ['tenant', 'sale', 'ingredient', 'quantity_deducted', 'created_at']
+
+
+@admin.register(SalePaymentOrder)
+class SalePaymentOrderAdmin(IngredientAuditAdmin):
+    list_display = ['tenant', 'sale', 'gateway_order_id', 'amount', 'currency', 'status', 'payment_id', 'paid_at']

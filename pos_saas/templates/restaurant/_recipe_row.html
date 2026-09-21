@@ -1,0 +1,6 @@
+<tr class="recipe-row" {% if row.DELETE.value %}hidden{% endif %}>
+<td>{{ row.id }}{{ row.ingredient }}{{ row.ingredient.errors }}{{ row.non_field_errors }}<small class="text-muted ingredient-unit"></small></td>
+<td>{{ row.quantity_required }}{{ row.quantity_required.errors }}</td>
+<td class="text-end"><output class="ingredient-line-cost">--</output></td>
+<td><span hidden>{{ row.DELETE }}</span><button type="button" class="btn btn-sm btn-outline-danger remove-recipe-row">Remove</button></td>
+</tr>

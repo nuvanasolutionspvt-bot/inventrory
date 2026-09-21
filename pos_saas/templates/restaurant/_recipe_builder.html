@@ -1,0 +1,14 @@
+{% load static %}
+<div class="border-top pt-3 mb-3" id="recipe-builder">
+<h2 class="h5">Recipes &amp; Food Cost</h2><p class="text-muted small">Enter quantities in each ingredient's unit. Costs use the latest ingredient purchase cost. Remove all rows to remove a portion recipe. Save the menu item to apply changes.</p>
+{% for section in recipe_sections %}<section class="recipe-section card mb-3" data-portion="{{ section.portion }}" {% if section.portion == 'half' and not half_recipe_enabled %}hidden{% endif %}>
+<div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2"><h3 class="h6 mb-0">{{ section.portion|title }} Portion</h3><div>Food cost: <output class="recipe-total">{{ section.cost|floatformat:2|default:'--' }}</output> / <output class="recipe-percentage">{{ section.percentage|floatformat:2|default:'--' }}</output></div></div>
+<div class="card-body">{{ section.formset.management_form }}{% if section.formset.non_form_errors %}<div class="alert alert-danger">{{ section.formset.non_form_errors }}</div>{% endif %}
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Ingredient / unit</th><th>Quantity per portion</th><th class="text-end">Cost</th><th></th></tr></thead><tbody class="recipe-rows">{% for row in section.formset %}{% include 'restaurant/_recipe_row.html' %}{% endfor %}</tbody></table></div>
+<button type="button" class="btn btn-sm btn-outline-primary add-recipe-row">Add Ingredient</button>
+<template class="recipe-empty-row">{% include 'restaurant/_recipe_row.html' with row=section.formset.empty_form %}</template>
+</div></section>{% endfor %}
+<a href="{% url 'ingredient_create' %}" class="small">Manage ingredients in Inventory</a>
+</div>
+{{ ingredient_costs|json_script:'recipe-ingredient-costs' }}
+<script src="{% static 'restaurant/recipes.js' %}" defer></script>

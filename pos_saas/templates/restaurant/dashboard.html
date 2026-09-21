@@ -30,6 +30,8 @@
     <div class="col-6 col-xl-3"><div class="card shadow-sm h-100"><div class="card-body d-flex align-items-center gap-3"><div class="kpi-icon" style="background:#f5efff;color:#7048a8"><i class="bi bi-journal-richtext"></i></div><div><div class="small text-muted">Active Menu Items</div><div class="kpi-value">{{ menu_items }}</div></div></div></div></div>
   </div>
 
+  {% include 'restaurant/_ingredient_low_stock.html' %}
+
   <div class="row g-4">
     <div class="col-lg-6">
       <div class="card shadow-sm h-100">
@@ -64,7 +66,7 @@
       {% if tenant_features.table_management %}<div class="col"><a href="{% url 'restaurant_module_page' 'tables' %}" class="btn btn-outline-primary w-100 py-3">Tables</a></div>{% endif %}
       {% if tenant_features.kot_management or tenant_features.kitchen_display %}<div class="col"><a href="{% url 'kitchen_display' %}" class="btn btn-outline-primary w-100 py-3">Kitchen Display</a></div>{% endif %}
       {% if tenant_features.online_payment %}<div class="col"><a href="{% url 'restaurant_module_page' 'online-payment' %}" class="btn btn-outline-primary w-100 py-3">Online Payment</a></div>{% endif %}
-      {% if tenant_features.inventory %}<div class="col"><a href="{% url 'restaurant_module_page' 'inventory' %}" class="btn btn-outline-primary w-100 py-3">Inventory</a></div>{% endif %}
+      {% if restaurant_inventory_access %}<div class="col"><a href="{% url 'restaurant_module_page' 'inventory' %}" class="btn btn-outline-primary w-100 py-3">Inventory</a></div>{% endif %}
     </div></div>
   </div>
   {% endif %}

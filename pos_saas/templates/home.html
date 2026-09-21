@@ -1,0 +1,69 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Nuvana POS helps restaurants, cafés, food trucks and quick service restaurants manage billing, kitchen orders and their growing business.">
+  <title>Nuvana POS — Good Food, Better Business</title>
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/bootstrap-icons.css' %}">
+  <link rel="stylesheet" href="{% static 'home/home.css' %}?v=20260914-home1-4">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <a class="brand" href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'home' %}{% endif %}" aria-label="{% if user.is_authenticated %}Nuvana POS dashboard{% else %}Nuvana POS home{% endif %}"><img src="{% static 'brand/nuvana-light.png' %}" alt="Nuvana"></a>
+  <nav aria-label="Main navigation">
+    <a href="{% url 'home' %}" aria-current="page">Home</a>
+    <a href="#features">Features</a>
+    <a href="#industries">Industries</a>
+    <a href="{% url 'contact_us' %}?subject=pricing">Pricing</a>
+    <a href="{% url 'contact_us' %}">Support</a>
+  </nav>
+  <a class="button button-light header-cta" href="{% url 'login' %}">Get Started</a>
+</header>
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <img class="hero-art" src="{% static 'home/home1.png' %}" alt="Nuvana point of sale system on a restaurant counter">
+    <div class="hero-content">
+      <h1 id="hero-title">Good Food<br><span>Better Business</span></h1>
+      <p class="hero-copy">We’re looking to connect with restaurant, café, coffee shop, food truck, takeaway and QSR owners who need a simple and efficient POS.</p>
+      <div class="actions"><a class="button button-primary" href="{% url 'login' %}">Get Started <i class="bi bi-arrow-right" aria-hidden="true"></i></a><a class="button button-outline" href="{% url 'contact_us' %}?subject=demo"><i class="bi bi-play-circle-fill" aria-hidden="true"></i> Request Demo</a></div>
+      <div class="benefits">
+        <div><span class="benefit-icon"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i></span><strong>Easy to Use</strong><small>Get started in minutes</small></div>
+        <div><span class="benefit-icon"><i class="bi bi-gear-fill" aria-hidden="true"></i></span><strong>Reliable</strong><small>Built for your business</small></div>
+        <div><span class="benefit-icon"><i class="bi bi-headset" aria-hidden="true"></i></span><strong>Dedicated Support</strong><small>We’re here for you</small></div>
+      </div>
+    </div>
+  </section>
+  <section class="features-section" id="features" aria-labelledby="features-title">
+    <h2 id="features-title">Everything You Need to Run Your Food Business</h2>
+    <p class="features-intro">Powerful features to simplify your operations and increase efficiency.</p>
+    <div class="features-grid">
+      <article class="feature-item"><span class="feature-icon"><i class="bi bi-lightning-charge" aria-hidden="true"></i></span><h3>Fast Billing</h3><p>Quick and accurate<br>billing for faster service</p></article>
+      <article class="feature-item"><span class="feature-icon"><i class="bi bi-printer" aria-hidden="true"></i></span><h3>KOT Management</h3><p>Send orders to kitchen<br>instantly</p></article>
+      <article class="feature-item"><span class="feature-icon"><i class="bi bi-clipboard-check" aria-hidden="true"></i></span><h3>Order Management</h3><p>Manage dine-in,<br>takeaway, delivery &amp; more</p></article>
+      <article class="feature-item"><span class="feature-icon"><i class="bi bi-bar-chart-fill" aria-hidden="true"></i></span><h3>Business Dashboard</h3><p>Get real-time insights<br>and grow your business</p></article>
+      <article class="feature-item"><span class="feature-icon"><i class="bi bi-hand-index" aria-hidden="true"></i></span><h3>Simple &amp; Easy to Use</h3><p>Designed for everyone<br>in your team</p></article>
+    </div>
+  </section>
+  <section class="industries" id="industries" aria-labelledby="industries-title">
+    <h2 id="industries-title">Built for Every Food Business</h2>
+    <p>Whether you run a restaurant, café, food truck or QSR, Nuvana POS is designed to fit your needs.</p>
+    <div class="business-grid">
+      <article class="business-card"><img src="{% static 'home/1.3.png' %}" alt="Warmly lit restaurant dining room" loading="lazy"><h3>Restaurant Owners</h3><p>Manage your dine-in<br>with ease</p></article>
+      <article class="business-card"><img src="{% static 'home/1.2.png' %}" alt="Cosy café with wooden tables" loading="lazy"><h3>Café Owners</h3><p>Perfect for coffee shops<br>and cafés</p></article>
+      <article class="business-card"><img src="{% static 'home/1.4.png' %}" alt="Quick service restaurant ordering counter" loading="lazy"><h3>QSR Owners</h3><p>Built for quick service<br>restaurants</p></article>
+      <article class="business-card"><img src="{% static 'home/1.1.png' %}" alt="Food truck welcoming customers in the evening" loading="lazy"><h3>Food Business Founders</h3><p>Ideal for food trucks<br>and cloud kitchens</p></article>
+    </div>
+  </section>
+  <section class="growth" aria-labelledby="growth-title">
+    <div class="growth-copy"><p class="eyebrow">Simple POS. Bigger possibilities.</p><h2 id="growth-title">Let’s Grow<br>Your Food Business</h2><p>Join hundreds of food business owners who trust Nuvana POS to run their business smoothly.</p><a class="button button-light" href="{% url 'login' %}">Get Started Today <i class="bi bi-arrow-right" aria-hidden="true"></i></a></div>
+    <img class="footer-art" src="{% static 'home/footer.png' %}" alt="Nuvana POS desktop, mobile app and receipt printer" loading="lazy">
+    <div class="growth-benefits"><div><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><strong>More Orders</strong></div><div><i class="bi bi-people-fill" aria-hidden="true"></i><strong>Happier Customers</strong></div><div><i class="bi bi-currency-rupee" aria-hidden="true"></i><strong>Higher Profits</strong></div><p>From Orders<br>to Growth</p></div>
+  </section>
+</main>
+<footer class="site-footer"><span>&copy; {% now 'Y' %} Nuvana POS</span><a href="{% url 'login' %}">Sign in</a><a href="{% url 'contact_us' %}">Contact Us</a></footer>
+</body>
+</html>
+
