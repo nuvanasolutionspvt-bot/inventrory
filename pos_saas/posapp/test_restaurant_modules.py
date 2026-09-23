@@ -115,3 +115,21 @@ class RestaurantModuleTests(TestCase):
         for name in ['kitchen_orders', 'kitchen_display', 'restaurant_tables']:
             self.assertNotContains(response, 'href="' + reverse(name) + '"')
             self.assertEqual(self.client.get(reverse(name)).status_code, 403)
+
+    def test_regular_admins_have_access_to_selected_modules(self):
+        self.user.is_superuser = False
+        self.user.is_staff = False
+        self.user.save()
+        for role in ['owner', 'admin']:
+            with self.subTest(role=role):
+                TenantMembership.objects.filter(user=self.user, tenant=self.tenant).update(role=role)
+                self.test_selected_module_matrix()
+
+    def test_admin_access_does_not_follow_user_to_staff_store(self):
+        self.user.is_superuser = False
+        self.user.save()
+        other = Tenant.objects.create(name='Staff store', slug='staff-store', business_type='restaurant')
+        TenantFeature.objects.create(tenant=other, kitchen_display=True)
+        TenantMembership.objects.create(tenant=other, user=self.user, role='staff')
+        self.activate(other)
+        self.assertEqual(self.client.get(reverse('kitchen_display')).status_code, 403)

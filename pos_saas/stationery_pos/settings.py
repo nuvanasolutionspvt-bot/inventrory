@@ -47,6 +47,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'stationery_pos.urls'
 
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'posapp.backends.TenantAdminBackend',
+]
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
