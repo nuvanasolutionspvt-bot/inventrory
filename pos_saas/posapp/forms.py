@@ -1,3 +1,5 @@
+from uuid import uuid4
+from django.contrib.auth import authenticate
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from django import forms
@@ -134,6 +136,38 @@ def role_queryset_for_business(business_type):
     if allowed is None:
         return qs
     return qs.filter(name__in=allowed)
+
+class TenantAuthenticationForm(AuthenticationForm):
+    def clean(self):
+        name = (self.cleaned_data.get('username') or '').strip()
+        password = self.cleaned_data.get('password')
+        self.login_tenant_id = None
+        if not name or not password:
+            return self.cleaned_data
+        memberships = TenantMembership.objects.filter(is_active=True, tenant__is_active=True).filter(
+            Q(login_username__iexact=name) | Q(login_username__isnull=True, user__username__iexact=name))
+        candidates = {}
+        for member in memberships.select_related('user').order_by('pk'):
+            candidates.setdefault(member.user_id, (member.user, member.tenant_id))
+        # Preserve platform administrator login, without accepting internal staff IDs.
+        for admin in User.objects.filter(username=name, is_superuser=True):
+            candidates.setdefault(admin.pk, (admin, None))
+        matches = []
+        for user, tenant_id in candidates.values():
+            authenticated = authenticate(self.request, username=user.username, password=password)
+            if authenticated is not None:
+                matches.append((authenticated, tenant_id))
+        if len(matches) > 1:
+            raise ValidationError('These credentials match more than one business. Contact your administrator to set a unique password or username.')
+        if matches:
+            self.user_cache, self.login_tenant_id = matches[0]
+            self.confirm_login_allowed(self.user_cache)
+            return self.cleaned_data
+        if not candidates:
+            # Match the password-hashing work done for an unknown Django username.
+            User().set_password(password)
+        raise self.get_invalid_login_error()
+
 
 class CompanyAuthenticationForm(AuthenticationForm):
     """Only platform superusers may authenticate through the company portal."""
@@ -316,10 +350,7 @@ class TenantRegistrationForm(forms.Form):
         return slug
 
     def clean_username(self):
-        username = self.cleaned_data['username'].strip()
-        if User.objects.filter(username__iexact=username).exists():
-            raise ValidationError("This username is already taken.")
-        return username
+        return self.cleaned_data['username'].strip().lower()
 
     def clean_contact_email(self):
         email = self.cleaned_data['contact_email'].strip().lower()
@@ -373,7 +404,7 @@ class TenantRegistrationForm(forms.Form):
         )
         name_parts = self.cleaned_data['owner_name'].split(None, 1)
         user = User.objects.create_user(
-            username=self.cleaned_data['username'],
+            username='tenant_' + uuid4().hex,
             email=self.cleaned_data['contact_email'],
             password=self.cleaned_data['password1'],
             first_name=name_parts[0],
@@ -381,7 +412,7 @@ class TenantRegistrationForm(forms.Form):
             is_staff=False,
         )
         user.groups.add(self._admin_group())
-        TenantMembership.objects.create(tenant=tenant, user=user, role='owner')
+        TenantMembership.objects.create(tenant=tenant, user=user, role='owner', login_username=self.cleaned_data['username'])
         if tenant.business_type == 'restaurant':
             selected_modules = set(self.cleaned_data.get('business_modules') or []) | RESTAURANT_REQUIRED_MODULES
             TenantFeature.objects.update_or_create(
@@ -570,6 +601,19 @@ class UserPermissionsForm(forms.ModelForm):
 
 
 class UserCreateForm(UserPermissionsForm):
+    username = forms.CharField(max_length=150, validators=User._meta.get_field('username').validators)
+
+    def clean_username(self):
+        name = self.cleaned_data['username'].strip().lower()
+        if self.tenant is None:
+            raise ValidationError('An active business is required.')
+        existing = TenantMembership.objects.filter(tenant=self.tenant).filter(
+            Q(login_username__iexact=name) | Q(login_username__isnull=True, user__username__iexact=name))
+        if existing.exists():
+            raise ValidationError('A user with that username already exists in this business.')
+        self.login_username = name
+        return 'tenant_' + uuid4().hex
+
     password1 = forms.CharField(
         widget=forms.PasswordInput(attrs={
             "class": "form-control",
@@ -630,6 +674,7 @@ class UserCreateForm(UserPermissionsForm):
             self.add_error('password2', "Passwords do not match.")
         return c
 
+    @transaction.atomic
     def save(self, commit=True):
         user = super().save(commit=False)
         user.set_password(self.cleaned_data['password1'])
@@ -637,6 +682,8 @@ class UserCreateForm(UserPermissionsForm):
             user.save()
             self.save_m2m()
             user.groups.set(self.cleaned_data.get('groups', []))
+            Tenant.objects.select_for_update().get(pk=self.tenant.pk)
+            TenantMembership.objects.create(tenant=self.tenant, user=user, role='staff', login_username=self.login_username)
         return user
 
 
@@ -998,7 +1045,13 @@ class SaleForm(TenantModelFormMixin, forms.ModelForm):
         if self.tenant is not None:
             self.fields['customer'].queryset = Customer.objects.filter(tenant=self.tenant).order_by('name')
             self.fields['restaurant_table'].queryset = RestaurantTable.objects.filter(tenant=self.tenant, is_active=True).order_by('name')
+            if self.tenant.business_type == 'restaurant' and not TenantFeature.objects.filter(tenant=self.tenant, table_management=True).exists():
+                self.fields['restaurant_table'].queryset = RestaurantTable.objects.none()
+                self.initial['restaurant_table'] = None
+                self.fields['restaurant_table'].disabled = True
             self.fields['waiter'].queryset = User.objects.filter(tenant_memberships__tenant=self.tenant, tenant_memberships__is_active=True, groups__name='Waiter').distinct().order_by('username')
+            waiter_names = dict(TenantMembership.objects.filter(tenant=self.tenant).values_list('user_id', 'login_username'))
+            self.fields['waiter'].label_from_instance = lambda user: waiter_names.get(user.pk) or user.username
         else:
             self.fields['customer'].queryset = Customer.objects.none()
             self.fields['restaurant_table'].queryset = RestaurantTable.objects.none()

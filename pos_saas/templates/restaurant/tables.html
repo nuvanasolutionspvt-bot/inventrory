@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tenant_users %}
 {% block title %}Tables - Nuvana POS{% endblock %}
 {% block breadcrumb %}Restaurant / Tables{% endblock %}
 
@@ -57,7 +58,7 @@
                   <h4 class="h5 mb-1"><a class="text-decoration-none text-reset" href="{% if table.open_order %}{% url 'sale_update' table.open_order.id %}{% else %}{% url 'pos_sale_create' %}?table={{ table.id }}{% endif %}">{{ table.name }}</a></h4>
                   <div class="small text-muted">{{ table.seats }} seat{{ table.seats|pluralize }}</div>
                   {% if table.open_order %}
-                    <div class="small mt-2">INV-{{ table.open_order.id }} / {{ table.open_order.waiter|default:'No waiter' }}</div>
+                    <div class="small mt-2">INV-{{ table.open_order.id }} / {{ table.open_order.waiter|tenant_username:request.tenant|default:'No waiter' }}</div>
                     <div class="fw-semibold">Rs. {{ table.open_order.total|floatformat:2 }}</div>
                   {% endif %}
                 </div>
@@ -84,7 +85,7 @@
           <thead><tr><th>Order</th><th>Table</th><th>Waiter</th><th>Total</th><th></th></tr></thead>
           <tbody>
             {% for order in open_orders %}
-            <tr><td>INV-{{ order.id }}</td><td>{{ order.restaurant_table|default:'-' }}</td><td>{{ order.waiter|default:'-' }}</td><td>Rs. {{ order.total|floatformat:2 }}</td><td class="text-end"><a class="btn btn-sm btn-primary" href="{% url 'sale_update' order.id %}">Open</a></td></tr>
+            <tr><td>INV-{{ order.id }}</td><td>{{ order.restaurant_table|default:'-' }}</td><td>{{ order.waiter|tenant_username:request.tenant|default:'-' }}</td><td>Rs. {{ order.total|floatformat:2 }}</td><td class="text-end"><a class="btn btn-sm btn-primary" href="{% url 'sale_update' order.id %}">Open</a></td></tr>
             {% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No open orders.</td></tr>{% endfor %}
           </tbody>
         </table>

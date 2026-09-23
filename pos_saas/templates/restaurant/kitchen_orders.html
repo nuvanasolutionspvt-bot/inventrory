@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tenant_users %}
 {% block title %}Kitchen Orders - Nuvana POS{% endblock %}
 {% block breadcrumb %}Restaurant / Kitchen Orders{% endblock %}
 
@@ -18,7 +19,7 @@
           <td class="fw-semibold">{{ kot.ticket_no }}</td>
           <td><a href="{% url 'sale_update' kot.sale.id %}">INV-{{ kot.sale.id }}</a><div class="small text-muted">{{ kot.created_at|date:'d M Y H:i' }}</div><div class="small text-muted">{{ kot.sale.get_order_status_display }}</div></td>
           <td>{{ kot.sale.restaurant_table|default:'-' }}</td>
-          <td>{{ kot.sale.waiter|default:'-' }}</td>
+          <td>{{ kot.sale.waiter|tenant_username:request.tenant|default:'-' }}</td>
           <td>
             {% for item in kot.sale.saleitem_set.all %}
               <div>{{ item.qty }} x {{ item.description|default:item.product.name }}{% if item.details %} <span class="text-muted">({{ item.details }})</span>{% endif %}</div>

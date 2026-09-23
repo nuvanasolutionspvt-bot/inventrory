@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tenant_users %}
 {% block title %}Restaurant Dashboard — Nuvana POS{% endblock %}
 {% block breadcrumb %}Restaurant / Dashboard{% endblock %}
 
@@ -17,7 +18,7 @@
         <h1 class="h3 mb-1">Restaurant Dashboard</h1>
         <p class="mb-0 opacity-75">Today's billing summary and menu performance.</p>
       </div>
-      {% if perms.posapp.can_pos %}
+      {% if pos_module_access %}
       <a href="{% url 'pos_sale_create' %}" class="btn btn-light"><i class="bi bi-plus-circle me-1"></i>New Order</a>
       {% endif %}
     </div>
@@ -58,14 +59,14 @@
   <div class="card shadow-sm mt-4">
     <div class="card-header bg-white"><h2 class="h5 mb-0">Quick Actions</h2></div>
     <div class="card-body"><div class="row row-cols-2 row-cols-md-4 g-3">
-      {% if perms.posapp.can_pos %}<div class="col"><a href="{% url 'pos_sale_create' %}" class="btn btn-outline-primary w-100 py-3">New Order</a></div>{% endif %}
-      {% if perms.posapp.add_product %}<div class="col"><a href="{% url 'restaurant_catalog_setup' %}" class="btn btn-outline-primary w-100 py-3">Menu Setup</a></div>{% endif %}
+      {% if pos_module_access %}<div class="col"><a href="{% url 'pos_sale_create' %}" class="btn btn-outline-primary w-100 py-3">New Order</a></div>{% endif %}
+      {% if catalog_module_access and perms.posapp.add_product %}<div class="col"><a href="{% url 'restaurant_catalog_setup' %}" class="btn btn-outline-primary w-100 py-3">Menu Setup</a></div>{% endif %}
       {% if perms.posapp.view_sale %}<div class="col"><a href="{% url 'sales_list' %}" class="btn btn-outline-primary w-100 py-3">Sales</a></div>{% endif %}
       {% if perms.posapp.can_view_reports %}<div class="col"><a href="{% url 'sales_report' %}" class="btn btn-outline-primary w-100 py-3">Sales Report</a></div>{% endif %}
-      {% if tenant_features.kot_management %}<div class="col"><a href="{% url 'kitchen_orders' %}" class="btn btn-outline-primary w-100 py-3">Kitchen Orders</a></div>{% endif %}
-      {% if tenant_features.table_management %}<div class="col"><a href="{% url 'restaurant_module_page' 'tables' %}" class="btn btn-outline-primary w-100 py-3">Tables</a></div>{% endif %}
-      {% if tenant_features.kot_management or tenant_features.kitchen_display %}<div class="col"><a href="{% url 'kitchen_display' %}" class="btn btn-outline-primary w-100 py-3">Kitchen Display</a></div>{% endif %}
-      {% if tenant_features.online_payment %}<div class="col"><a href="{% url 'restaurant_module_page' 'online-payment' %}" class="btn btn-outline-primary w-100 py-3">Online Payment</a></div>{% endif %}
+      {% if tenant_features.kot_management and perms.posapp.can_manage_kot %}<div class="col"><a href="{% url 'kitchen_orders' %}" class="btn btn-outline-primary w-100 py-3">Kitchen Orders</a></div>{% endif %}
+      {% if tenant_features.table_management and perms.posapp.can_pos %}<div class="col"><a href="{% url 'restaurant_tables' %}" class="btn btn-outline-primary w-100 py-3">Tables</a></div>{% endif %}
+      {% if tenant_features.kitchen_display and perms.posapp.can_view_kds %}<div class="col"><a href="{% url 'kitchen_display' %}" class="btn btn-outline-primary w-100 py-3">Kitchen Display</a></div>{% endif %}
+      {% if restaurant_payment_access %}<div class="col"><a href="{% url 'restaurant_module_page' 'online-payment' %}" class="btn btn-outline-primary w-100 py-3">Online Payment</a></div>{% endif %}
       {% if restaurant_inventory_access %}<div class="col"><a href="{% url 'restaurant_module_page' 'inventory' %}" class="btn btn-outline-primary w-100 py-3">Inventory</a></div>{% endif %}
     </div></div>
   </div>
@@ -84,10 +85,10 @@
           <tr>
             <td>INV-{{ order.id }}</td>
             <td>{{ order.restaurant_table|default:'?' }}</td>
-            <td>{{ order.waiter|default:'?' }}</td>
+            <td>{{ order.waiter|tenant_username:request.tenant|default:'?' }}</td>
             <td>{{ order.customer|default:'Walk-in' }}</td>
             <td class="text-end">&#8377;{{ order.total|floatformat:2 }}</td>
-            <td class="text-end">{% if perms.posapp.can_pos %}<a href="{% url 'sale_update' order.id %}" class="btn btn-sm btn-primary">Open Bill</a>{% endif %}</td>
+            <td class="text-end">{% if pos_module_access %}<a href="{% url 'sale_update' order.id %}" class="btn btn-sm btn-primary">Open Bill</a>{% endif %}</td>
           </tr>
           {% empty %}<tr><td colspan="6" class="text-center text-muted py-4">No open orders.</td></tr>{% endfor %}
         </tbody>

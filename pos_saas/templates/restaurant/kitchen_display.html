@@ -1,11 +1,12 @@
 {% extends 'base.html' %}
+{% load tenant_users %}
 {% block title %}Kitchen Display - Nuvana POS{% endblock %}
 {% block breadcrumb %}Restaurant / Kitchen Display{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="m-0">Kitchen Display</h3>
-  <a href="{% url 'kitchen_orders' %}" class="btn btn-outline-primary"><i class="bi bi-receipt-cutoff me-1"></i>Kitchen Orders</a>
+  {% if tenant_features.kot_management and perms.posapp.can_manage_kot %}<a href="{% url 'kitchen_orders' %}" class="btn btn-outline-primary"><i class="bi bi-receipt-cutoff me-1"></i>Kitchen Orders</a>{% endif %}
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
@@ -16,12 +17,13 @@
         <strong>{{ kot.ticket_no }}</strong>
         <span class="badge {% if kot.status == 'preparing' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ kot.get_status_display }}</span>
       </div>
-      <div class="px-3 pt-3 small text-muted">INV-{{ kot.sale.id }}{% if kot.sale.restaurant_table %} / {{ kot.sale.restaurant_table }}{% endif %}{% if kot.sale.waiter %} / {{ kot.sale.waiter }}{% endif %}</div>
+      <div class="px-3 pt-3 small text-muted">INV-{{ kot.sale.id }}{% if kot.sale.restaurant_table %} / {{ kot.sale.restaurant_table }}{% endif %}{% if kot.sale.waiter %} / {{ kot.sale.waiter|tenant_username:request.tenant }}{% endif %}</div>
       <div class="card-body">
         {% for item in kot.sale.saleitem_set.all %}
           <div class="d-flex justify-content-between border-bottom py-2"><span>{{ item.description|default:item.product.name }}{% if item.details %} <span class="text-muted">{{ item.details }}</span>{% endif %}</span><strong>{{ item.qty }}</strong></div>
         {% endfor %}
       </div>
+      {% if tenant_features.kot_management and perms.posapp.can_manage_kot %}
       <div class="card-footer bg-white d-flex gap-2">
         <form method="post" action="{% url 'kitchen_order_status' kot.id %}" class="flex-fill">
           {% csrf_token %}<input type="hidden" name="status" value="preparing"><input type="hidden" name="next" value="{% url 'kitchen_display' %}"><button class="btn btn-outline-warning w-100">Preparing</button>
@@ -30,6 +32,7 @@
           {% csrf_token %}<input type="hidden" name="status" value="ready"><input type="hidden" name="next" value="{% url 'kitchen_display' %}"><button class="btn btn-success w-100">Ready</button>
         </form>
       </div>
+      {% endif %}
     </article>
   </div>
   {% empty %}

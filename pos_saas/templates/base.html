@@ -1,4 +1,5 @@
 {% load static %}
+{% load tenant_users %}
 <!doctype html>
 <html lang="en">
   <head>
@@ -26,7 +27,7 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarsApp">
           <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            {% if perms.posapp.view_product %}
+            {% if catalog_module_access and perms.posapp.view_product %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'product_list' %}">
                   <i class="bi bi-box-seam me-1"></i>Products
@@ -50,7 +51,7 @@
               </li>
             {% endif %}
 
-            {% if perms.posapp.can_pos %}
+            {% if pos_module_access %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'pos_sale_create' %}">
                   <i class="bi bi-cash-register me-1"></i>POS
@@ -58,7 +59,7 @@
               </li>
             {% endif %}
 
-            {% if request.tenant.business_type == 'restaurant' and perms.posapp.add_product %}
+            {% if request.tenant.business_type == 'restaurant' and catalog_module_access and perms.posapp.add_product %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'restaurant_catalog_setup' %}">
                   <i class="bi bi-journal-plus me-1"></i>Catalog
@@ -76,13 +77,13 @@
               {% if tenant_features.kitchen_display and perms.posapp.can_view_kds %}
                 <li class="nav-item"><a class="nav-link" href="{% url 'kitchen_display' %}"><i class="bi bi-display me-1"></i>Kitchen Display</a></li>
               {% endif %}
-              {% if tenant_features.online_payment and perms.posapp.can_pos or restaurant_inventory_access %}
+              {% if restaurant_payment_access or restaurant_inventory_access %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                     <i class="bi bi-grid-3x3-gap me-1"></i>Restaurant
                   </a>
                   <ul class="dropdown-menu shadow-sm">
-                    {% if tenant_features.online_payment and perms.posapp.can_pos %}
+                    {% if restaurant_payment_access %}
                       <li><a class="dropdown-item" href="{% url 'restaurant_module_page' 'online-payment' %}"><i class="bi bi-credit-card-2-front me-2"></i>Online Payment</a></li>
                     {% endif %}
                     {% if restaurant_inventory_access %}
@@ -166,7 +167,7 @@
               <li class="nav-item dropdown">
                 <button id="profileDropdown" class="btn btn-sm btn-outline-light dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open profile menu">
                   <i class="bi bi-person-circle" aria-hidden="true"></i>
-                  <span>{{ user.username }}</span>
+                  <span>{{ user|tenant_username:request.tenant }}</span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="profileDropdown">
                   <li><h6 class="dropdown-header">My Profile</h6></li>

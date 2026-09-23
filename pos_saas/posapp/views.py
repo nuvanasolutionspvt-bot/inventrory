@@ -1,3 +1,4 @@
+from .tenancy import restaurant_module_required
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from datetime import date, timedelta
@@ -632,7 +633,9 @@ def register(request):
             else:
                 messages.success(request, f"Tenant '{tenant.name}' created. Complete payment to activate the selected plan.")
             if tenant.business_type == 'restaurant':
-                return redirect('restaurant_catalog_setup')
+                if TenantFeature.objects.filter(tenant=tenant, products_catalog=True).exists():
+                    return redirect('restaurant_catalog_setup')
+                return redirect('dashboard')
             return redirect('subscription')
     else:
         form = TenantRegistrationForm()
@@ -705,6 +708,7 @@ def _ensure_restaurant_categories(tenant):
 
 
 @login_required
+@restaurant_module_required('products_catalog')
 def restaurant_catalog_setup(request):
     tenant = _tenant(request)
     if tenant.business_type != 'restaurant':
@@ -1262,6 +1266,7 @@ def _pager_ctx(request, queryset, default_size=25):
 # -------------
 
 @login_required
+@restaurant_module_required('products_catalog')
 def product_list(request):
     tenant = _tenant(request)
     q = (request.GET.get('q') or '').strip()
@@ -1287,6 +1292,7 @@ def product_list(request):
 
 
 @login_required
+@restaurant_module_required('products_catalog')
 def product_create(request):
     tenant = _tenant(request)
     _ensure_restaurant_categories(tenant)
@@ -1303,6 +1309,7 @@ def product_create(request):
 
 @login_required
 @transaction.atomic
+@restaurant_module_required('products_catalog')
 def product_update(request, pk):
     tenant = _tenant(request)
     if tenant.business_type == 'restaurant' and not request.user.has_perm('posapp.change_product'):
@@ -1454,6 +1461,7 @@ def _product_set_save(request, product_set=None):
 
 
 @login_required
+@restaurant_module_required('products_catalog')
 def product_export(request):
     tenant = _tenant(request)
     response = HttpResponse(content_type='text/csv')
@@ -1473,6 +1481,7 @@ def product_export(request):
 
 
 @login_required
+@restaurant_module_required('products_catalog')
 def product_import(request):
     tenant = _tenant(request)
     if request.method != 'POST' or 'file' not in request.FILES:
@@ -1621,6 +1630,7 @@ def customer_quick_create(request):
 
 @login_required
 @permission_required('posapp.can_adjust_stock', raise_exception=True)
+@restaurant_module_required('products_catalog')
 def product_add_stock(request, pk=None):
     tenant = _tenant(request)
     if tenant.business_type == 'pharmacy':
@@ -2032,6 +2042,7 @@ def purchase_update(request, purchase_id):
 @login_required
 @permission_required('posapp.can_pos', raise_exception=True)
 @transaction.atomic
+@restaurant_module_required('pos_billing')
 def pos_sale_create(request):
     tenant = _tenant(request)
     site_settings = SiteSetting.get(tenant)
@@ -2055,6 +2066,8 @@ def pos_sale_create(request):
 
     selected_table = None
     if is_restaurant and request.GET.get('table'):
+        if not TenantFeature.objects.filter(tenant=tenant, table_management=True).exists():
+            raise PermissionDenied('Table Management is not enabled for this tenant.')
         selected_table = get_object_or_404(
             RestaurantTable, tenant=tenant, is_active=True, pk=request.GET['table'],
         )
@@ -2825,6 +2838,7 @@ def sales_list(request):
 @login_required
 @permission_required('posapp.can_pos', raise_exception=True)
 @transaction.atomic
+@restaurant_module_required('pos_billing')
 def sale_update(request, sale_id):
     tenant = _tenant(request)
     sale = get_object_or_404(Sale.objects.select_for_update(), tenant=tenant, pk=sale_id)
@@ -2870,6 +2884,8 @@ def sale_update(request, sale_id):
             sale = form.save(commit=False)
             sale.tenant = tenant
             sale_action = request.POST.get('sale_action') or 'complete'
+            if is_restaurant and sale_action == 'generate_kot' and not _tenant_kot_enabled(tenant):
+                raise PermissionDenied('Kitchen Orders is not enabled for this tenant.')
             if sale_action == 'razorpay' and (not is_restaurant or not checkout_available(tenant) or sale.order_status != Sale.ORDER_STATUS_OPEN):
                 raise PermissionDenied('Razorpay requires a configured restaurant and an open bill.')
             if is_waiter and sale_action != 'generate_kot':
@@ -3026,7 +3042,7 @@ def restaurant_module_page(request, module):
         return payment_module(request)
     if module == 'inventory':
         return restaurant_inventory_list(request)
-    return render(request, 'restaurant/module.html', {'title': title, 'icon': icon})
+    return {'kot': kitchen_orders, 'tables': restaurant_tables, 'kds': kitchen_display}[module](request)
 
 # --------------------------
 
@@ -3124,7 +3140,7 @@ def kitchen_display(request):
     if tenant.business_type != 'restaurant':
         raise PermissionDenied('Kitchen Display is available only for restaurant tenants.')
     features, _created = TenantFeature.objects.get_or_create(tenant=tenant, defaults={'pos_billing': True, 'products_catalog': True})
-    if not (features.kot_management or features.kitchen_display):
+    if not features.kitchen_display:
         raise PermissionDenied('Kitchen Display is not enabled for this tenant.')
     orders = KitchenOrderTicket.objects.filter(tenant=tenant).exclude(status=KitchenOrderTicket.STATUS_READY).select_related('sale').prefetch_related('sale__saleitem_set__product').order_by('created_at')
     return render(request, 'restaurant/kitchen_display.html', {'orders': orders})
@@ -3137,20 +3153,24 @@ def security_users(request):
     q = request.GET.get('q', '').strip()
     users = User.objects.filter(tenant_memberships__tenant=tenant).distinct().order_by('username')
     if q:
-        users = users.filter(username__icontains=q) | users.filter(email__icontains=q)
+        users = users.filter(Q(username__icontains=q) | Q(email__icontains=q) | Q(tenant_memberships__tenant=tenant, tenant_memberships__login_username__icontains=q))
     page = Paginator(users, int(request.GET.get('ps', 25))).get_page(request.GET.get('page'))
+    names = dict(TenantMembership.objects.filter(tenant=tenant).values_list('user_id', 'login_username'))
+    for listed_user in page.object_list:
+        listed_user.tenant_username = names.get(listed_user.pk) or listed_user.username
     return render(request, 'security/users_list.html', {'page': page, 'q': q})
 
 
 @permission_required('posapp.can_manage_users', raise_exception=True)
+@transaction.atomic
 def security_user_new(request):
     tenant = _tenant(request)
     if request.method == 'POST':
+        Tenant.objects.select_for_update().get(pk=tenant.pk)
         form = UserCreateForm(request.POST, tenant=tenant)
         if form.is_valid():
             u = form.save()
-            TenantMembership.objects.get_or_create(tenant=tenant, user=u, defaults={'role': 'staff'})
-            messages.success(request, f"User '{u.username}' created.")
+            messages.success(request, f"User '{form.login_username}' created.")
             return redirect('security_users')
     else:
         form = UserCreateForm(tenant=tenant)
@@ -3161,11 +3181,12 @@ def security_user_new(request):
 def security_user_edit(request, user_id):
     tenant = _tenant(request)
     user = get_object_or_404(User, tenant_memberships__tenant=tenant, pk=user_id)
+    display_username = TenantMembership.objects.get(tenant=tenant, user=user).login_username or user.username
     if request.method == 'POST':
         form = UserEditForm(request.POST, instance=user, tenant=tenant)
         if form.is_valid():
             form.save()
-            messages.success(request, f"User '{user.username}' updated.")
+            messages.success(request, f"User '{display_username}' updated.")
             return redirect('security_users')
     else:
         form = UserEditForm(instance=user, initial={'groups': user.groups.all()}, tenant=tenant)
@@ -3183,7 +3204,7 @@ def security_user_delete(request, user_id):
     if user.pk == request.user.pk or user.is_superuser or membership.role == 'owner':
         messages.error(request, "You cannot delete your own access, a business owner, or a platform superuser.")
         return redirect('security_users')
-    username = user.username
+    username = membership.login_username or user.username
     membership.delete()
     messages.success(request, f"User '{username}' removed from this business.")
     return redirect('security_users')
@@ -3404,6 +3425,7 @@ def _ean13_normalize(value: str):
 
 @login_required
 @permission_required('posapp.can_print_barcodes', raise_exception=True)
+@restaurant_module_required('products_catalog')
 def barcode_labels(request):
     tenant = _tenant(request)
     if request.method == 'GET':
@@ -3566,6 +3588,7 @@ def barcode_labels(request):
 # --- Bulk stock adjust (CSV) ---
 @login_required
 @permission_required('posapp.can_adjust_stock', raise_exception=True)
+@restaurant_module_required('products_catalog')
 def stock_bulk_adjust(request):
     """
     Upload a CSV to adjust stock in bulk.
@@ -3671,6 +3694,7 @@ import csv, io
 
 @login_required
 @permission_required('posapp.can_adjust_stock', raise_exception=True)
+@restaurant_module_required('products_catalog')
 def stock_bulk_template(request):
     """
     Download a CSV template for bulk stock adjustments.

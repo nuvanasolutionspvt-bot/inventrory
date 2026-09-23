@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="m-0">Users</h3>
+  <h3 class="m-0">Users ? {{ request.tenant.name }}</h3>
   <a href="{% url 'security_user_new' %}" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>New User</a>
 </div>
 
@@ -27,7 +27,7 @@
   <tbody>
     {% for u in page.object_list %}
     <tr>
-      <td>{{ u.username }}</td>
+      <td>{{ u.tenant_username }}</td>
       <td>{{ u.email }}</td>
       <td>
         {% if u.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
@@ -42,7 +42,7 @@
         {% if u.pk != request.user.pk and not u.is_superuser %}
         <form method="post" action="{% url 'security_user_delete' u.id %}" class="d-inline" onsubmit="return confirm('Remove this user from this business? Their access to this business will be deleted.');">
           {% csrf_token %}
-          <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Delete {{ u.username }} from this business">Delete</button>
+          <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Delete {{ u.tenant_username }} from this business">Delete</button>
         </form>
         {% endif %}
       </td>

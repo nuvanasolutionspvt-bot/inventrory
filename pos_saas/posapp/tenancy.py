@@ -73,3 +73,20 @@ def restaurant_inventory_enabled(tenant):
 def can_manage_restaurant_inventory(user, tenant):
     return bool(user and user.is_authenticated and restaurant_inventory_enabled(tenant)
                 and user.has_perm('posapp.change_product'))
+
+
+def restaurant_module_required(module):
+    """Enforce saved restaurant module selections without changing other businesses."""
+    from functools import wraps
+
+    def decorate(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            tenant = require_active_tenant(request)
+            if tenant.business_type == 'restaurant':
+                features, _ = TenantFeature.objects.get_or_create(tenant=tenant)
+                if not getattr(features, module, False):
+                    raise PermissionDenied('This module is not enabled for this tenant.')
+            return view(request, *args, **kwargs)
+        return wrapped
+    return decorate

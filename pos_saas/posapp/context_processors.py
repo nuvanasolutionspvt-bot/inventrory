@@ -30,6 +30,12 @@ def tenant_features(request):
         and user.has_perm('posapp.can_pos')
         and (kitchen_notifications_admin(user, tenant) or user.groups.filter(name='Waiter').exists())
     )
-    return {'tenant_features': features, 'waiter_notifications': waiter_notifications,
+    restaurant = tenant.business_type == 'restaurant'
+    pos_access = bool(user and user.has_perm('posapp.can_pos') and (not restaurant or features.pos_billing))
+    catalog_access = not restaurant or features.products_catalog
+    payment_access = bool(restaurant and features.online_payment and pos_access
+                          and not user.groups.filter(name='Waiter').exists())
+    return {'pos_module_access': pos_access, 'catalog_module_access': catalog_access,
+            'restaurant_payment_access': payment_access, 'tenant_features': features, 'waiter_notifications': waiter_notifications,
             'restaurant_inventory_access': can_manage_restaurant_inventory(user, tenant),
             'razorpay_available': checkout_available(tenant)}

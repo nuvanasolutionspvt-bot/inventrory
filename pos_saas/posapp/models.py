@@ -199,11 +199,12 @@ class TenantMembership(TimeStampedModel):
 
     tenant = models.ForeignKey(Tenant, related_name='memberships', on_delete=models.CASCADE)
     user = models.ForeignKey(User, related_name='tenant_memberships', on_delete=models.CASCADE)
+    login_username = models.CharField(max_length=150, null=True, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='staff')
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = [('tenant', 'user')]
+        unique_together = [('tenant', 'user'), ('tenant', 'login_username')]
         indexes = [
             models.Index(fields=['tenant', 'role']),
             models.Index(fields=['user', 'is_active']),
